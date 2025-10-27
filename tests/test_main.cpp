@@ -19,6 +19,7 @@ int main() {
     auto matA = linalg::Mat<double, 4, 4>::identity();
     auto matB = linalg::Mat<double, 4, 4>::identity();
     auto matC = matA * matB + linalg::transpose(matA);
+    auto matCAdj = linalg::adj(matC);
     std::print("Matrix C: \n");
     for (uint32_t i = 0; i < 4; ++i) {
         for (uint32_t j = 0; j < 4; ++j) {
@@ -32,7 +33,7 @@ int main() {
     std::println("Resulting Vector: ({}, {}, {}, {})", resVec.x(), resVec.y(), resVec.z(), resVec.w());
 
     auto scalarRes = v * linalg::Mat<double, 4, 4>::identity() * v;
-    std::println("Scalar Result: {}", scalarRes);
+    std::println("v * M * v = {}", scalarRes);
 
     std::pair<double, double> roots = {0.0, 0.0};
     auto noOfRoots = linalg::solveQuadraticEquation(1.0, -3.0, 2.0, roots.first, roots.second);

@@ -1431,7 +1431,11 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         Mat<T, R, C> result;
         for (uint32_t i{0}; i < R; ++i) {
             for (uint32_t j{0}; j < C; ++j) {
-                result[j][i] = conj(mat[i][j]);
+                if constexpr (is_specialization_v<T, std::complex>) {
+                    result[j][i] = std::conj(mat[i][j]);
+                } else {
+                    result[j][i] = mat[i][j];
+                }
             }
         }
         return result;
@@ -1440,6 +1444,11 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     template<DualOrScalar T, uint32_t R, uint32_t C>
     CUDA_COMPATIBLE [[nodiscard]] constexpr inline auto adj(const Mat<T, R, C>& mat) {
         return transpose(conj(mat));
+    }
+
+    template<DualOrScalar T, uint32_t N>
+    CUDA_COMPATIBLE [[nodiscard]] constexpr inline auto adj(const Vec<T, N>& vec) {
+        return conj(vec);
     }
 
     template<DualOrScalar T, DualOrScalar U, uint32_t N, uint32_t R, uint32_t C>
