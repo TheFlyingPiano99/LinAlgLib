@@ -43,3 +43,6 @@
 # Build directories
 build/*
 bin/*
+
+.vscode/*
+.idea/*
