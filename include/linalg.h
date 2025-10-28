@@ -14,6 +14,7 @@
 #include <concepts>
 #include <initializer_list>
 #include <type_traits>
+#include <format>
 
 #ifdef ENABLE_CUDA_SUPPORT
     #include <cuda/std/complex>
@@ -1599,29 +1600,48 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         return 0;
     }
 
-    template<ScalarType T>
+    template<RealType T>
     CUDA_HOST std::string to_string(const T& val) {
-        return std::to_string(val);
+        return std::format("{}", val);
     }
 
     template<ComplexType T>
     CUDA_HOST std::string to_string(const T& cVal) {
-        return "(" + std::to_string(cVal.real()) + " + " + std::to_string(cVal.imag()) + "i)";
+        return std::format("{}{:+}i", cVal.real(), cVal.imag());
+    }
+
+    template<DualType T>
+    CUDA_HOST std::string to_string(const T& dVal) {
+        if constexpr (is_specialization_v<unwrap_t<T>, Dual>) {
+            return std::format("(f(x) = {}, f(x)' = {}, f(x)'' = {})", to_string(dVal.fx()), to_string(dVal.dfxdx()), to_string(dVal.dfxdx<2>()));
+        }
+        return std::format("(f(x) = {}, f(x)' = {})", to_string(dVal.fx()), to_string(dVal.dfxdx()));
     }
 
     template<DualOrScalar T, uint32_t N>
     CUDA_HOST std::string to_string(const Vec<T, N>& v) {
         std::string str = "(";
         for (int i = 0; i < N; i++) {
-            if constexpr (is_specialization_v<T, std::complex>) {
-                str.append(linalg::to_string(v[i]));
-            } else {
-                str.append(std::to_string(v[i]));
-            }
+            str.append(to_string(v[i]));
             if (i < N - 1)
                 str.append(", ");
         }
         str.append(")");
+        return str;
+    }
+
+    template<DualOrScalar T, uint32_t R, uint32_t C>
+    CUDA_HOST std::string to_string(const Mat<T, R, C>& mat) {
+        std::string str = "";
+        for (uint32_t i{0}; i < R; ++i) {
+            str.append("| ");
+            for (uint32_t j{0}; j < C; ++j) {
+                str.append(to_string(mat[i][j]));
+                if (j < C - 1)
+                    str.append(", ");
+            }
+            str.append(" |\n");
+        }
         return str;
     }
 
