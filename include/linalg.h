@@ -124,6 +124,24 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         >;   // Let the type be Dual if one of the types is derivative and select the larger precision of the two inner types.
 
 
+    template<DualOrScalar T>
+    using ForceComplex 
+        = std::conditional_t<
+            DualType<T>,
+            Dual<std::conditional_t<
+                    is_specialization_v<unwrap_t<T>, std::complex>,
+                    unwrap_t<T>,
+                    std::complex<unwrap_t<T>>
+                >
+            >,
+            std::conditional_t<
+                is_specialization_v<T, std::complex>,
+                T,
+                std::complex<T>
+            >
+        >;
+
+
     /*
     Calculates the value of a function and its derivative with respect to x.
     Represents (f(x), df/dx)
@@ -494,11 +512,11 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
 
     template<DualOrScalar T>
     [[nodiscard]]
-    CUDA_COMPATIBLE constexpr auto cos(const Dual<T>& pair);
+    CUDA_COMPATIBLE constexpr auto cos(const Dual<T>& pair) noexcept;
 
     template<DualOrScalar T>
     [[nodiscard]]
-    CUDA_COMPATIBLE constexpr auto sin(const Dual<T>& pair) {
+    CUDA_COMPATIBLE constexpr auto sin(const Dual<T>& pair) noexcept {
         #ifdef ENABLE_CUDA_SUPPORT
         if constexpr (is_specialization_v<T, cuda::std::complex>) {
             return Dual{
@@ -524,7 +542,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
 
     template<DualOrScalar T>
     [[nodiscard]]
-    CUDA_COMPATIBLE constexpr auto cos(const Dual<T>& pair) {
+    CUDA_COMPATIBLE constexpr auto cos(const Dual<T>& pair) noexcept {
         #ifdef ENABLE_CUDA_SUPPORT
         if constexpr (is_specialization_v<T, cuda::std::complex>) {
             return Dual{
@@ -868,13 +886,15 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
 
         CUDA_COMPATIBLE
-        Vec() : m_data{} {}
+        [[nodiscard]]
+        constexpr Vec() : m_data{} {}
 
 
         // initializer-list constructor: allow construction from brace lists
         // e.g. Vec<double,2>{-5.0, 0}
         template<DualOrScalar U>
-        CUDA_COMPATIBLE constexpr explicit Vec(std::initializer_list<U> list) {
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr explicit Vec(std::initializer_list<U> list) noexcept {
             uint32_t i = 0;
             for (auto it = list.begin(); it != list.end() && i < N; ++it, ++i) {
                 m_data[i] = static_cast<T>(*it);
@@ -886,21 +906,28 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
 
 
         template<DualOrScalar U>
-        CUDA_COMPATIBLE constexpr explicit Vec(const Vec<U, N>& v) {
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr explicit Vec(const Vec<U, N>& v) noexcept {
             for (int i = 0; i < N; i++) {
                 m_data[i] = static_cast<T>(v[i]);
             }
         }
-        
-        CUDA_COMPATIBLE constexpr inline uint32_t dim() const {
+
+        CUDA_COMPATIBLE
+        [[nodiscard]]
+        constexpr inline uint32_t dim() const noexcept {
             return N;
         }
 
-        CUDA_COMPATIBLE constexpr const T* data() const {
+        CUDA_COMPATIBLE
+        [[nodiscard]]
+        constexpr const T* data() const noexcept {
             return this->m_data;
         }
 
-        CUDA_COMPATIBLE constexpr T* data() {
+        CUDA_COMPATIBLE
+        [[nodiscard]]
+        constexpr T* data() noexcept {
             return this->m_data;
         }
 
@@ -1250,7 +1277,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             
             CUDA_COMPATIBLE
             [[nodiscard]]
-            static auto identity() {
+            static constexpr auto identity() noexcept {
                 static_assert(R == C, "Identity matrix must be square!");
                 auto M = Mat();
                 for (uint32_t i{0}; i < R; ++i) {
@@ -1263,15 +1290,15 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         
             CUDA_COMPATIBLE
             [[nodiscard]]
-            Mat() : m_data{} {}
+            constexpr Mat() noexcept : m_data{} {}
 
             CUDA_COMPATIBLE
             [[nodiscard]]
-            Mat(std::initializer_list<Vec<T, C>> list) : m_data{list} {}
+            constexpr Mat(std::initializer_list<Vec<T, C>> list) noexcept : m_data{list} {}
 
             CUDA_COMPATIBLE
             [[nodiscard]]
-            Mat(std::initializer_list<T> list) : m_data{} {
+            constexpr Mat(std::initializer_list<T> list) noexcept : m_data{} {
                 uint32_t i = 0;
                 for (auto it = list.begin(); it != list.end() && i < R; ++it, ++i) {
                     uint32_t j = 0;
@@ -1289,24 +1316,24 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
                 }
             }
 
-            CUDA_COMPATIBLE [[nodiscard]] constexpr inline uint32_t rowCount() const {
+            CUDA_COMPATIBLE [[nodiscard]] constexpr inline uint32_t rowCount() const noexcept {
                 return R;
             }
 
-            CUDA_COMPATIBLE [[nodiscard]] constexpr inline uint32_t colCount() const {
+            CUDA_COMPATIBLE [[nodiscard]] constexpr inline uint32_t colCount() const noexcept {
                 return C;
             }
 
-            CUDA_COMPATIBLE [[nodiscard]] constexpr inline const Vec<T, C>& operator[](unsigned int idx) const {
+            CUDA_COMPATIBLE [[nodiscard]] constexpr inline const Vec<T, C>& operator[](unsigned int idx) const noexcept {
                 return m_data[idx];
             }
 
-            CUDA_COMPATIBLE [[nodiscard]] constexpr inline Vec<T, C>& operator[](unsigned int idx) {
+            CUDA_COMPATIBLE [[nodiscard]] constexpr inline Vec<T, C>& operator[](unsigned int idx) noexcept {
                 return m_data[idx];
             }
 
             template<DualOrScalar U, uint32_t R2, uint32_t C2>
-            CUDA_COMPATIBLE [[nodiscard]] constexpr inline auto operator*(const Mat<U, R2, C2>& other) const {
+            CUDA_COMPATIBLE [[nodiscard]] constexpr inline auto operator*(const Mat<U, R2, C2>& other) const noexcept {
                 static_assert(C == R2, "Matrix dimensions do not match for multiplication!");
                 Mat<LargerOrDerivative<T, U>, R, C2> result;
                 for (uint32_t i{0}; i < R; ++i) {
@@ -1497,9 +1524,16 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         return result;
     }
 
+    template<DualOrScalar ...T>
+    struct EquationSolution {
+        std::tuple<T...> roots;
+        uint16_t root_count;
+    };
 
-    template<typename T>
-    concept VecOrDualOrScalar = is_specialization_v<T, Vec> ||  is_specialization_v<T, Dual> || ScalarType<T>;
+    enum class RootDomain {
+        Real,
+        Complex
+    };
 
     /*
     Return the number of roots found while solving the quadratic equation ax^2 + bx + c = 0:
@@ -1508,36 +1542,87 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     1: one real root
     0: no real roots
     */
-    template<DualOrScalar T1, DualOrScalar T2, DualOrScalar T3, DualOrScalar T4>
+    template<RootDomain Domain = RootDomain::Real, DualOrScalar T1, DualOrScalar T2, DualOrScalar T3>
     CUDA_COMPATIBLE
-    auto solveQuadraticEquation(const T1& a, const T2& b, const T3& c, T4& root_min, T4& root_plus) {
-        auto discriminant = b * b - static_cast<T1>(4.0) * a * c;
-        if (discriminant < T1{0.0}) {
-            return 0;  // No real roots
+    constexpr auto solveQuadraticEquation(const T1& a, const T2& b, const T3& c) noexcept {
+        using outType = std::conditional_t<
+                (Domain == RootDomain::Complex),
+                ForceComplex<LargerOrDerivative<T1, LargerOrDerivative<T2, T3>>>,
+                LargerOrDerivative<T1, LargerOrDerivative<T2, T3>>
+            >;
+        EquationSolution<outType, outType> solution;
+
+        auto discriminant = b * b - 4.0 * a * c;
+        if constexpr (Domain == RootDomain::Real) {
+            if constexpr (ComplexType<decltype(discriminant)>) {
+                if (discriminant.real() < 0.0) {
+                    solution.roots = std::make_tuple(outType{}, outType{});
+                    solution.root_count = 0;
+                    return solution;
+                }
+            }
+            else {
+                if (discriminant < 0.0) {
+                    solution.roots = std::make_tuple(outType{}, outType{});
+                    solution.root_count = 0;
+                    return solution;
+                }
+            }
         }
-        else if (discriminant == T1{0.0}) {
-            root_min = -b / (static_cast<T1>(2.0) * a);
-            root_plus = root_min;
-            return 1;  // One root
+        if (discriminant == outType{0.0}) {
+            solution.roots = std::make_tuple(-b / (static_cast<outType>(2.0) * a), -b / (static_cast<outType>(2.0) * a));
+            solution.root_count = 1;
+            return solution;
         }
-        decltype(discriminant) sqrt_discriminant;
+        auto sqrt_discriminant = std::conditional_t<(Domain == RootDomain::Complex), ForceComplex<decltype(discriminant)>, decltype(discriminant)>{};
         if constexpr (ScalarType<decltype(discriminant)>) {
-            sqrt_discriminant = std::sqrt(discriminant);
+            if constexpr (Domain == RootDomain::Complex) {
+                sqrt_discriminant = std::sqrt(ForceComplex<decltype(discriminant)>{discriminant});
+            }
+            else {
+                sqrt_discriminant = std::sqrt(discriminant);
+            }
         }
         else {
             sqrt_discriminant = linalg::sqrt(discriminant);
         }
-        root_min = (-b - sqrt_discriminant) / (static_cast<T1>(2.0) * a);
-        root_plus = (-b + sqrt_discriminant) / (static_cast<T1>(2.0) * a);
-        return 2;  // Two real roots
+        solution.roots = std::make_tuple((-b - sqrt_discriminant) / (static_cast<T1>(2.0) * a), (-b + sqrt_discriminant) / (static_cast<T1>(2.0) * a));
+        solution.root_count = 2;
+        return solution;
     }
 
-    template<VecOrDualOrScalar T>
+    template<DualOrScalar T>
     auto solveCubicEquation(const T& a, const T& b, const T& c, const T& d, T& root1, T& root2, T& root3) {
         // Use Cardano's method or other numerical methods to find the roots
         static_assert("Unimplemented function!");
         
         return 0;
+    }
+
+    template<ScalarType T>
+    CUDA_HOST std::string to_string(const T& val) {
+        return std::to_string(val);
+    }
+
+    template<ComplexType T>
+    CUDA_HOST std::string to_string(const T& cVal) {
+        return "(" + std::to_string(cVal.real()) + " + " + std::to_string(cVal.imag()) + "i)";
+    }
+
+    template<DualOrScalar T, uint32_t N>
+    CUDA_HOST std::string to_string(const Vec<T, N>& v) {
+        std::string str = "(";
+        for (int i = 0; i < N; i++) {
+            if constexpr (is_specialization_v<T, std::complex>) {
+                str.append(linalg::to_string(v[i]));
+            } else {
+                str.append(std::to_string(v[i]));
+            }
+            if (i < N - 1)
+                str.append(", ");
+        }
+        str.append(")");
+        return str;
     }
 
 }
