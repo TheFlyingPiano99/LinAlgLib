@@ -33,7 +33,7 @@
 namespace linalg {
 
 template <typename T>
-constexpr T PI = T{3.1415926535897932384626433832795028841971};
+constexpr T PI = T{3.14159265358979323846264338327950288419716939937510582097494459230781640628};
 
 
 template <typename, template<typename...> class>
@@ -1613,9 +1613,9 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     template<DualType T>
     CUDA_HOST std::string to_string(const T& dVal) {
         if constexpr (is_specialization_v<unwrap_t<T>, Dual>) {
-            return std::format("(f(x) = {}, f(x)' = {}, f(x)'' = {})", to_string(dVal.fx()), to_string(dVal.dfxdx()), to_string(dVal.dfxdx<2>()));
+            return std::format("(fx={}, fx'={}, fx''={})", to_string(dVal.fx()), to_string(dVal.dfxdx()), to_string(dVal.dfxdx<2>()));
         }
-        return std::format("(f(x) = {}, f(x)' = {})", to_string(dVal.fx()), to_string(dVal.dfxdx()));
+        return std::format("(fx={}, fx'={})", to_string(dVal.fx()), to_string(dVal.dfxdx()));
     }
 
     template<DualOrScalar T, uint32_t N>
