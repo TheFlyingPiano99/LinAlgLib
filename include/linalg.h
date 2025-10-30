@@ -1199,7 +1199,16 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         return dot(u, v);
     }
 
-    
+    template<DualOrScalar T, DualOrScalar U, uint32_t N>
+    CUDA_COMPATIBLE constexpr inline auto elementwiseProd(const Vec<T, N>& u, const Vec<U, N>& v) {
+        auto w = Vec<LargerOrDerivative<T, U>, N>{};
+        for (int i = 0; i < N; i++) {
+            w[i] = u[i] * v[i];
+        }
+        return w;
+    }
+
+    /*
     // Dot product of two real valued vectors 
     template<DualOrScalar T, DualOfRealOrRealScalar U,  uint32_t N>
     CUDA_COMPATIBLE constexpr inline auto dot(const Mat<T, 1, N>& u, const Mat<U, N, 1>& v) {
@@ -1209,6 +1218,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         return sum;
     }
+    */
 
     /*
     // Dot product of two complex valued vectors
