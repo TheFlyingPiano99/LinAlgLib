@@ -61,7 +61,5 @@ int main() {
     std::cout << "Root 1: " << TinyLA::to_string(std::get<0>(solution.roots)) << std::endl;
     std::cout << "Root 2: " << TinyLA::to_string(std::get<1>(solution.roots)) << std::endl;
     
-    cuda::std::complex<double> z1{1.0, 2.0};
-    TinyLA::Vec<cuda::std::complex<double>, 4> cudaVec;
-
+    return 0;
 }
