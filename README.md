@@ -11,7 +11,7 @@ A header-only C++ template library for linear algebra operations with simple for
 Using CMake, you can fetch the content of this repository using FetchContent as follows
 ```cmake
 FetchContent_Declare(TinyLA_content
-    GIT_REPOSITORY https://github.com/TheFlyingPiano99/LinAlgLib.git
+    GIT_REPOSITORY https://github.com/TheFlyingPiano99/TinyLA.git
     GIT_TAG main
     GIT_SHALLOW TRUE)
 FetchContent_MakeAvailable(TinyLA_content)
