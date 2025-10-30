@@ -78,21 +78,24 @@ std::cout << "f'(x) = cos(pi) = " << result.dfxdx() << std::endl;
 ### Complex Numbers with Differentiation
 
 ```cpp
-    // Vectors with complex dual numbers
-    auto cVec = TinyLA::Vec3<TinyLA::Dual<std::complex<double>>>{};
-    cVec.x() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{1.0, 0.0});
-    cVec.y() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{0.5, 2.0});
-    cVec.z() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{1.0, 1.0});
+// Vectors with complex dual numbers
+auto cVec = TinyLA::Vec3<TinyLA::Dual<std::complex<double>>>{};
+cVec.x() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{1.0, 0.0});
+cVec.y() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{0.5, 2.0});
+cVec.z() = TinyLA::initVariableWithDiffOrder<1>(std::complex<double>{1.0, 1.0});
 
-    auto complexResult = TinyLA::dot(cVec, cVec);   // Sum_i a_i * conj(b_i)
-    std::cout << "Complex dot product: " << TinyLA::to_string(complexResult) << std::endl;
+auto complexResult = TinyLA::dot(cVec, cVec);   // Sum_i a_i * conj(b_i)
+std::cout << "Complex dot product: " << TinyLA::to_string(complexResult) << std::endl;
 ```
 
 ### Polynomial Equation Solving
 
 ```cpp
 // Solve quadratic equation: x² + 1 = 0
-auto solution = TinyLA::solveQuadraticEquation<TinyLA::RootDomain::Complex>(1.0, 0.0, 1.0);
+auto a = 1.0;
+auto b = 2.0;
+auto c = 4.0;
+auto solution = TinyLA::solveQuadraticEquation<TinyLA::RootDomain::Complex>(a, b, c);
 
 std::cout << "Number of roots: " << solution.root_count << std::endl;
 std::cout << "Root 1: " << TinyLA::to_string(std::get<0>(solution.roots)) << std::endl;

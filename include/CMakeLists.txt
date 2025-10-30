@@ -8,10 +8,12 @@ target_include_directories(TinyLA INTERFACE
 )
 
 # Optionally enable CUDA support
-if (TRUE)
-    message(STATUS "CUDA support enabled")
-    target_compile_definitions(TinyLA INTERFACE "ENABLE_CUDA_SUPPORT")
+find_package(CUDAToolkit QUIET)
 
-    find_package(CUDAToolkit REQUIRED)
+if (CUDAToolkit_FOUND)
+    message(STATUS "CUDA support enabled - CUDA Toolkit found")
+    target_compile_definitions(TinyLA INTERFACE "ENABLE_CUDA_SUPPORT")
     target_link_libraries(TinyLA INTERFACE CUDA::cudart)
+else()
+    message(STATUS "CUDA support disabled - CUDA Toolkit not found")
 endif()

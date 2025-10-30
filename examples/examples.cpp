@@ -52,11 +52,16 @@ int main() {
 
 
     // Solve quadratic equation: x² + 1 = 0
-    auto solution = TinyLA::solveQuadraticEquation<TinyLA::RootDomain::Complex>(1.0, 0.0, 1.0);
+    auto a = 1.0;
+    auto b = 2.0;
+    auto c = 4.0;
+    auto solution = TinyLA::solveQuadraticEquation<TinyLA::RootDomain::Complex>(a, b, c);
 
     std::cout << "Number of roots: " << solution.root_count << std::endl;
     std::cout << "Root 1: " << TinyLA::to_string(std::get<0>(solution.roots)) << std::endl;
     std::cout << "Root 2: " << TinyLA::to_string(std::get<1>(solution.roots)) << std::endl;
     
-    return 0;
+    cuda::std::complex<double> z1{1.0, 2.0};
+    TinyLA::Vec<cuda::std::complex<double>, 4> cudaVec;
+
 }
