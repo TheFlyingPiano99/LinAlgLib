@@ -19,10 +19,20 @@ int main() {
     std::println("cVec: {}", linalg::to_string(cVec));
     std::println("Complex Result: {}", linalg::to_string(cResult));
 
-    constexpr auto matA = linalg::Mat<double, 4, 4>::identity();
+    auto matA = linalg::Mat<double, 4, 4>::identity();
+    matA[0][1] = 2.0;
     constexpr auto matB = linalg::Mat<double, 4, 4>::identity();
-    constexpr auto matC = matA * matB + linalg::transpose(matA);
-    constexpr auto matCAdj = linalg::adj(matC);
+    auto matC = matA * matB + linalg::transpose(matA);
+    auto matD = linalg::Mat<double, 4, 3>{
+        {1.0, 0.0, 0.0},
+        {0.0, 5.0, 0.0},
+        {0.0, 0.0, 2.0},
+        {0.0, 0.0, 1.0}
+    };
+    const auto tensorProd = linalg::kronecker(matA, matD);
+    std::println("Tensor Product:\n{}", linalg::to_string(tensorProd));
+    std::println("Matrix C:\n{}", linalg::to_string(matC));
+    auto matCAdj = linalg::adj(matC);
     std::println("Matrix C:\n{}", linalg::to_string(matCAdj));
 
     auto v = linalg::Vec4<std::complex<double>>{2.0, 2.0, 2.0, 2.0};
@@ -37,6 +47,11 @@ int main() {
     std::print("Number of roots: {}\n", solution.root_count);
     std::print("Roots: {}, {}\n", linalg::to_string(std::get<0>(solution.roots)), linalg::to_string(std::get<1>(solution.roots)));
 
+
+    std::println("v = {}", linalg::to_string(v));
+
+
+    std::println("All tests passed!");
     return 0;
 }
 

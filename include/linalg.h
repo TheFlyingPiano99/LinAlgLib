@@ -324,13 +324,13 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             if constexpr (order == 0) {
                 return fx();
             } else if constexpr (ScalarType<T>) {
-                if (order == 1) {
+                if constexpr (order == 1) {
                     return m_dfxdx;
                 } else {
                     return static_cast<T>(0.0);
                 }
             } else {
-                if (order == 1) {
+                if constexpr (order == 1) {
                     return m_dfxdx.fx();
                 } else {
                     return m_dfxdx.dfxdx<order - 1>();
@@ -1200,6 +1200,33 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     }
 
     
+    // Dot product of two real valued vectors 
+    template<DualOrScalar T, DualOfRealOrRealScalar U,  uint32_t N>
+    CUDA_COMPATIBLE constexpr inline auto dot(const Mat<T, 1, N>& u, const Mat<U, N, 1>& v) {
+        auto sum = LargerOrDerivative<T, U>{};
+        for (int i = 0; i < N; i++) {
+            sum += u[0][i] * v[i][0];
+        }
+        return sum;
+    }
+
+    /*
+    // Dot product of two complex valued vectors
+    template<DualOrScalar T, DualOfComplexOrComplexScalar U, uint32_t N>
+    CUDA_COMPATIBLE constexpr inline auto dot(const Mat<T, 1, N>& u, const Mat<U, N, 1>& v) {
+        auto sum = LargerOrDerivative<T, U>{};
+        for (int i = 0; i < N; i++) {
+            sum += u[0][i] * conj(v[i][0]);
+        }
+        return sum;
+    }
+
+    template<DualOrScalar T, DualOrScalar U, uint32_t N>
+    CUDA_COMPATIBLE constexpr inline auto operator*(const Mat<T, 1, N>& u, const Mat<U, N, 1>& v) {
+        return dot(u, v);
+    }
+    */
+    
     template<DualOrScalar T, DualOrScalar U>
     CUDA_COMPATIBLE constexpr auto cross(const Vec<T, 3>& u, const Vec<U, 3>& v) {
         return Vec<LargerOrDerivative<T, U>, 3>{
@@ -1296,6 +1323,15 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             CUDA_COMPATIBLE
             [[nodiscard]]
             constexpr Mat(std::initializer_list<Vec<T, C>> list) noexcept : m_data{list} {}
+
+            CUDA_COMPATIBLE
+            [[nodiscard]]
+            constexpr Mat(std::initializer_list<std::initializer_list<T>> list) noexcept {
+                uint32_t i = 0;
+                for (auto it = list.begin(); it != list.end() && i < R; ++it, ++i) {
+                    m_data[i] = Vec<T, C>{*it};
+                }
+            }
 
             CUDA_COMPATIBLE
             [[nodiscard]]
@@ -1480,13 +1516,28 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     }
 
     template<DualOrScalar T, DualOrScalar U, uint32_t N, uint32_t R, uint32_t C>
-    CUDA_COMPATIBLE [[nodiscard]] constexpr auto operator*(const Vec<T, N>& vec, const Mat<U, R, C>& mat) {
+    CUDA_COMPATIBLE [[nodiscard]] constexpr auto operator*(const Vec<T, N>& vec, const Mat<U, R, C>& mat) noexcept {
         static_assert(N == R, "Matrix and vector dimensions do not match for multiplication!");
         Vec<LargerOrDerivative<T, U>, C> result;
         for (uint32_t i{0}; i < C; ++i) {
             result[i] = T{};
             for (uint32_t k{0}; k < R; ++k) {
                 result[i] += vec[k] * mat[k][i];
+            }
+        }
+        return result;
+    }
+
+    template<DualOrScalar T, DualOrScalar U, uint32_t R1, uint32_t C1, uint32_t R2, uint32_t C2>
+    CUDA_COMPATIBLE [[nodiscard]] constexpr auto kronecker(const Mat<T, R1, C1>& A, const Mat<U, R2, C2>& B) noexcept {
+        Mat<LargerOrDerivative<T, U>, R1 * R2, C1 * C2> result;
+        for (uint32_t i{0}; i < R2; ++i) {
+            for (uint32_t j{0}; j < C2; ++j) {
+                for (uint32_t k{0}; k < R1; ++k) {
+                    for (uint32_t l{0}; l < C1; ++l) {
+                        result[i * R2 + k][j * C2 + l] = A[k][l] * B[i][j];
+                    }
+                }
             }
         }
         return result;
