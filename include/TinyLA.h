@@ -30,7 +30,7 @@
     #define CUDA_HOST
 #endif
 
-namespace linalg {
+namespace TinyLA {
 
 template <typename T>
 constexpr T PI = T{3.14159265358979323846264338327950288419716939937510582097494459230781640628};
@@ -350,8 +350,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     template<ScalarType T>
     using ThirdOrderDerivative = Dual<Dual<Dual<T>>>;
 
-    template<ScalarType T, uint32_t Order> requires (Order >= 1)
-    CUDA_COMPATIBLE static constexpr auto initDerivativePair(T value) {
+    template<uint32_t Order, ScalarType T> requires (Order >= 1)
+    CUDA_COMPATIBLE static constexpr auto initVariableWithDiffOrder(T value) {
         if constexpr (Order == 1) {
             return FirstOrderDerivative<T>{value, 1.0};
         } else if constexpr (Order == 2) {
@@ -404,7 +404,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         if constexpr (ScalarType<T>) {
             exp_fx = std::exp(pair._raw_fx());
         } else {
-            exp_fx = linalg::exp(pair._raw_fx());
+            exp_fx = TinyLA::exp(pair._raw_fx());
         }
         return Dual<T>{
             exp_fx,
@@ -429,7 +429,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             pow_fx = std::pow(base._raw_fx(), exponent);
         }
         else {
-            pow_fx = linalg::pow(base._raw_fx(), exponent);
+            pow_fx = TinyLA::pow(base._raw_fx(), exponent);
         }
         return Dual<T>{
             pow_fx,
@@ -445,7 +445,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             pow_fx = std::pow(base, exponent._raw_fx());
         }
         else {
-            pow_fx = linalg::pow(base, exponent._raw_fx());
+            pow_fx = TinyLA::pow(base, exponent._raw_fx());
         }
         return Dual<U>{
             pow_fx,
@@ -460,7 +460,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         if constexpr (ScalarType<T> && ScalarType<U>) {
             pow_fx = std::pow(base._raw_fx(), exponent._raw_fx());
         } else {
-            pow_fx = linalg::pow(base._raw_fx(), exponent._raw_fx());
+            pow_fx = TinyLA::pow(base._raw_fx(), exponent._raw_fx());
         }
         return Dual{
             pow_fx,
@@ -481,7 +481,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         if constexpr (ScalarType<T>) {
             sqrt_fx = std::sqrt(pair._raw_fx());
         } else {
-            sqrt_fx = linalg::sqrt(pair._raw_fx());
+            sqrt_fx = TinyLA::sqrt(pair._raw_fx());
         }
         return Dual{
             sqrt_fx,
@@ -502,7 +502,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         if constexpr (ScalarType<T>) {
             log_fx = std::log(exponent._raw_fx());
         } else {
-            log_fx = linalg::log(exponent._raw_fx());
+            log_fx = TinyLA::log(exponent._raw_fx());
         }
         return Dual{
             log_fx,
@@ -535,8 +535,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         else {
             return Dual{
-                linalg::sin(pair._raw_fx()),
-                linalg::cos(pair._raw_fx()) * pair._raw_dfxdx()
+                TinyLA::sin(pair._raw_fx()),
+                TinyLA::cos(pair._raw_fx()) * pair._raw_dfxdx()
             };
         }
     }
@@ -560,8 +560,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::cos(pair._raw_fx()),
-                -linalg::sin(pair._raw_fx()) * pair._raw_dfxdx()
+                TinyLA::cos(pair._raw_fx()),
+                -TinyLA::sin(pair._raw_fx()) * pair._raw_dfxdx()
             };
         }
     }
@@ -586,8 +586,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         else {
             return Dual{
-                linalg::tan(pair._raw_fx()),
-                pair._raw_dfxdx() / (linalg::cos(pair._raw_fx()) * linalg::cos(pair._raw_fx()))
+                TinyLA::tan(pair._raw_fx()),
+                pair._raw_dfxdx() / (TinyLA::cos(pair._raw_fx()) * TinyLA::cos(pair._raw_fx()))
             };
         }
     }
@@ -611,8 +611,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::asin(pair._raw_fx()),
-                pair._raw_dfxdx() / linalg::sqrt(T{1.0} - pair._raw_fx() * pair._raw_fx())
+                TinyLA::asin(pair._raw_fx()),
+                pair._raw_dfxdx() / TinyLA::sqrt(T{1.0} - pair._raw_fx() * pair._raw_fx())
             };
         }
     }
@@ -636,8 +636,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::acos(pair._raw_fx()),
-                -pair._raw_dfxdx() / linalg::sqrt(T{1.0} - pair._raw_fx() * pair._raw_fx())
+                TinyLA::acos(pair._raw_fx()),
+                -pair._raw_dfxdx() / TinyLA::sqrt(T{1.0} - pair._raw_fx() * pair._raw_fx())
             };
         }
     }
@@ -656,7 +656,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             atan_fx = std::atan(pair._raw_fx());
         }
         else {
-            atan_fx = linalg::atan(pair._raw_fx());
+            atan_fx = TinyLA::atan(pair._raw_fx());
         }
         return Dual{
             atan_fx,
@@ -688,8 +688,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         else {
             return Dual{
-                linalg::sinh(pair._raw_fx()),
-                linalg::cosh(pair._raw_fx()) * pair._raw_dfxdx()
+                TinyLA::sinh(pair._raw_fx()),
+                TinyLA::cosh(pair._raw_fx()) * pair._raw_dfxdx()
             };
         }
     }
@@ -714,8 +714,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         else {
             return Dual<T>{
-                linalg::cosh(pair._raw_fx()),
-                linalg::sinh(pair._raw_fx()) * pair._raw_dfxdx()
+                TinyLA::cosh(pair._raw_fx()),
+                TinyLA::sinh(pair._raw_fx()) * pair._raw_dfxdx()
             };
         }
     }
@@ -740,8 +740,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         }
         else {
             return Dual{
-                linalg::tanh(pair._raw_fx()),
-                pair._raw_dfxdx() * (T{1.0} - linalg::tanh(pair._raw_fx()) * linalg::tanh(pair._raw_fx()))
+                TinyLA::tanh(pair._raw_fx()),
+                pair._raw_dfxdx() * (T{1.0} - TinyLA::tanh(pair._raw_fx()) * TinyLA::tanh(pair._raw_fx()))
             };
         }
     }
@@ -765,8 +765,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::asinh(pair._raw_fx()),
-                pair._raw_dfxdx() / linalg::sqrt(T{1.0} + pair._raw_fx() * pair._raw_fx())
+                TinyLA::asinh(pair._raw_fx()),
+                pair._raw_dfxdx() / TinyLA::sqrt(T{1.0} + pair._raw_fx() * pair._raw_fx())
             };
         }
     }
@@ -790,8 +790,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::acosh(pair._raw_fx()),
-                pair._raw_dfxdx() / linalg::sqrt(pair._raw_fx() * pair._raw_fx() - T{1.0})
+                TinyLA::acosh(pair._raw_fx()),
+                pair._raw_dfxdx() / TinyLA::sqrt(pair._raw_fx() * pair._raw_fx() - T{1.0})
             };
         }
     }
@@ -815,7 +815,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             };
         } else {
             return Dual{
-                linalg::atanh(pair._raw_fx()),
+                TinyLA::atanh(pair._raw_fx()),
                 pair._raw_dfxdx() / (T{1.0} - pair._raw_fx() * pair._raw_fx())
             };
         }
@@ -834,7 +834,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         if constexpr (ScalarType<T>) {
             abs_fx = std::abs(pair._raw_fx());
         } else {
-            abs_fx = linalg::abs(pair._raw_fx());
+            abs_fx = TinyLA::abs(pair._raw_fx());
         }
         return Dual<T>{
             abs_fx,
@@ -863,8 +863,8 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             conj_fx = std::conj(pair._raw_fx());
             conj_dfxdx = std::conj(pair._raw_dfxdx());
         } else {
-            conj_fx = linalg::conj(pair._raw_fx());
-            conj_dfxdx = linalg::conj(pair._raw_dfxdx());
+            conj_fx = TinyLA::conj(pair._raw_fx());
+            conj_dfxdx = TinyLA::conj(pair._raw_dfxdx());
         }
         return Dual<T>{
             conj_fx,
@@ -1148,7 +1148,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
         return stream;
     }
 
-        // Alias
+    // Alias
     template<DualOrScalar T>
     using Vec2 = Vec<T, 2>;
 
@@ -1157,6 +1157,24 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
 
     template<DualOrScalar T>
     using Vec4 = Vec<T, 4>;
+
+    using CDVec2 = Vec2<std::complex<double>>;
+
+    using CDVec3 = Vec3<std::complex<double>>;
+
+    using CDVec4 = Vec4<std::complex<double>>;
+
+    using DVec2 = Vec2<double>;
+
+    using DVec3 = Vec3<double>;
+
+    using DVec4 = Vec4<double>;
+
+    using FVec2 = Vec2<float>;
+
+    using FVec3 = Vec3<float>;
+
+    using FVec4 = Vec4<float>;
 
     using UVec2 = Vec2<uint32_t>;
 
@@ -1265,9 +1283,19 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
     CUDA_COMPATIBLE constexpr auto norm(const Vec<T, N>& v) {
         auto sum = T{};
         for (int i = 0; i < N; i++) {
-            sum += pow(abs(v[i]), 2);
+            if constexpr (ScalarType<T>) {
+                sum += std::pow(std::abs(v[i]), 2);
+            }
+            else {
+                sum += TinyLA::pow(TinyLA::abs(v[i]), 2);
+            }
         }
-        return sqrt(sum);
+        if constexpr (ScalarType<T>) {
+            return std::sqrt(sum);
+        }
+        else {
+            return TinyLA::sqrt(sum);
+        }
     }
 
     /*
@@ -1489,6 +1517,47 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             Vec<T, C> m_data[R];
     };
 
+    // Alias
+    template<DualOrScalar T>
+    using Mat2 = Mat<T, 2, 2>;
+
+    template<DualOrScalar T>
+    using Mat3 = Mat<T, 3, 3>;
+
+    template<DualOrScalar T>
+    using Mat4 = Mat<T, 4, 4>;
+
+    using CDMat2 = Mat2<std::complex<double>>;
+
+    using CDMat3 = Mat3<std::complex<double>>;
+
+    using CDMat4 = Mat4<std::complex<double>>;
+
+    using DMat2 = Mat2<double>;
+
+    using DMat3 = Mat3<double>;
+
+    using DMat4 = Mat4<double>;
+
+    using FMat2 = Mat2<float>;
+
+    using FMat3 = Mat3<float>;
+
+    using FMat4 = Mat4<float>;
+
+    using UMat2 = Mat2<uint32_t>;
+
+    using UMat3 = Mat3<uint32_t>;
+
+    using UMat4 = Mat4<uint32_t>;
+    
+    using IMat2 = Mat2<int32_t>;
+
+    using IMat3 = Mat3<int32_t>;
+
+    using IMat4 = Mat4<int32_t>;
+
+
     template<DualOrScalar T, uint32_t R, uint32_t C>
     CUDA_COMPATIBLE [[nodiscard]] constexpr inline auto transpose(const Mat<T, R, C>& mat) {
         Mat<T, C, R> result;
@@ -1646,7 +1715,7 @@ inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
             }
         }
         else {
-            sqrt_discriminant = linalg::sqrt(discriminant);
+            sqrt_discriminant = TinyLA::sqrt(discriminant);
         }
         solution.roots = std::make_tuple((-b - sqrt_discriminant) / (static_cast<T1>(2.0) * a), (-b + sqrt_discriminant) / (static_cast<T1>(2.0) * a));
         solution.root_count = 2;
