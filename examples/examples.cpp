@@ -69,18 +69,17 @@ int main() {
     std::cout << "Root 2: " << TinyLA::to_string(std::get<1>(solution.roots)) << std::endl;
     */
 
-    TinyLA::Scalar<double, 0> x0 = 0.5;
-    TinyLA::Scalar<double, 1> x1 = 6.0;
+    TinyLA::Scalar<double, 0> s0 = 0.5;
+    TinyLA::Scalar<double, 1> s1 = 6.0;
     TinyLA::Scalar<double, 2> s2 = 7.0;
     
-    print_expr(x0);
-    print_expr(x1);
+    print_expr(s0);
+    print_expr(s1);
     print_expr(s2);
 
     // Simplified expression to avoid compiler crash
-    auto s = (x0 * x1).derivate<0>();
+    auto s = (3 * -s0 + s1 / s0 + s2);
     print_expr(s);
-        
 
     return 0;
 }
