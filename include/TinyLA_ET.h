@@ -15,7 +15,6 @@
 #include <initializer_list>
 #include <type_traits>
 #include <format>
-#include <array>
 
 #ifdef ENABLE_CUDA_SUPPORT
     #include <cuda/std/complex>
@@ -46,16 +45,16 @@ struct std::formatter<std::complex<T>> : std::formatter<T> {
 
 namespace TinyLA {
 
-    template <class T>
-    constexpr T PI = T{3.14159265358979323846264338327950288419716939937510582097494459230781640628};
+    //-------------------------------------------------------------------------------
 
-
+    // Trait to check if a type is a specialization of a template
     template <class, template<typename...> class>
     inline constexpr bool is_specialization_v = false;
 
     template <template<class...> class Template, class... Args>
     inline constexpr bool is_specialization_v<Template<Args...>, Template> = true;
 
+    // Concepts:
     #ifdef ENABLE_CUDA_SUPPORT
         template<class T>
         concept ComplexType = is_specialization_v<T, cuda::std::complex> || is_specialization_v<T, std::complex>;
@@ -69,133 +68,89 @@ namespace TinyLA {
     template<class T>
     concept ScalarType = ComplexType<T> || RealType<T> || std::is_integral_v<T>;
 
-    template <class First, class... Rest>
-    CUDA_COMPATIBLE inline constexpr auto first(First firstArg, Rest...) {
-        return firstArg;
-    }
 
+    //---------------------------------------------------------------------------------------
+
+    /*
+        Variable ID type for automatic differentiation
+    */
     using VarIDType = int16_t;
 
-    template <VarIDType... Values>
-    struct DependencyArray {
-        static constexpr std::array<VarIDType, sizeof...(Values)> data{Values...};
-    };
-
-    template <VarIDType... Values>
-    consteval bool contains(const DependencyArray<Values...>& arr, const VarIDType& value) {
-        for (std::size_t i{}; i < sizeof...(Values); i++)
-            if (arr.data[i] == value)
-                return true;
-        return false;
-    }
-    
-    template <VarIDType... A1, VarIDType... A2>
-    consteval auto set_union(DependencyArray<A1...>, DependencyArray<A2...>) {
-        constexpr auto temp = [] {
-            std::array<> result{A1...}; // start with A1
-            auto size = sizeof...(A1);
-            for (auto v : {A2...}) {
-                bool found = false;
-                for (auto existing : {A1...}) {
-                    if (v == existing) {
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    result[size++] = v;
-                }
-            }
-            return result;
-        }();
-
-        return []<std::size_t... Is>(std::index_sequence<Is...>) constexpr {
-            return DependencyArray<temp[Is]...>{};
-        }(std::make_index_sequence<sizeof...(A1) + sizeof...(A2)>{});
-    }
-
-    template <VarIDType... A1, VarIDType... A2>
-    consteval auto concatenate(DependencyArray<A1...>, DependencyArray<A2...>) {
-        auto array = DependencyArray<A1..., A2...>{};
-        return array;
-    }
-
-    template<class AE>
+    template<class E, uint32_t Row = 1, uint32_t Col = 1>
     class AbstractExpr {
         public:
-
-        template<VarIDType varId>
-        [[nodiscard]]
-        CUDA_COMPATIBLE constexpr inline auto derivate() const {
-            return static_cast<const AE&>(*this).derivate<varId>();
-        }
-
-        [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            return static_cast<const AE&>(*this).to_string();
-        }
-
         static constexpr bool variable_data = false;
-    };
-
-
-    template<class SE>
-    class AbstractScalarExpr : public AbstractExpr<AbstractScalarExpr<SE>> {
-        public:
+        static constexpr uint32_t rows = Row;
+        static constexpr uint32_t cols = Col;
 
         template<VarIDType varId>
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
-            return static_cast<const SE&>(*this).derivate<varId>();
+            return static_cast<const E&>(*this).derivate<varId>();
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            return static_cast<const SE&>(*this).to_string();
+        CUDA_HOST constexpr inline std::string to_string() const {
+            return static_cast<const E&>(*this).to_string();
         }
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            return (static_cast<const SE&>(*this)).eval();
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            return (static_cast<const E&>(*this)).eval(r, c);
         }
-
     };
 
     template<class E>
-    concept ScalarExprType = requires(const E& e) { e.to_string(); e.eval(); };
+    concept ExprType = requires(const E& e) {
+        e.eval(0, 0);
+        E::rows;
+        E::cols;
+        e.to_string();
+    };
+
+    template<ExprType E1, ExprType E2>
+    struct is_eq_shape {
+        static constexpr bool value = (E1::rows == E2::rows && E1::cols == E2::cols);
+    };
+
+    template<ExprType E1, ExprType E2>
+    inline constexpr bool is_eq_shape_v = is_eq_shape<E1, E2>::value;
+
+    template<ExprType E>
+    struct is_scalar_shape {
+        static constexpr bool value = (E::rows == 1 && E::cols == 1);
+    };
+
+    template<ExprType E>
+    inline constexpr bool is_scalar_shape_v = is_scalar_shape<E>::value;
 
     template<ScalarType T>
-    class ScalarZero : public AbstractScalarExpr<ScalarZero<T>> {
+    class ZeroScalar : public AbstractExpr<ZeroScalar<T>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarZero() {}
+        CUDA_COMPATIBLE inline constexpr ZeroScalar() {}
 
         template<VarIDType varId>
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
-            static_assert(varId >= 0, "Variable IDs must be non-negative.");
-            if constexpr (varId == 0) {
-                return ScalarZero{};
-            }
-            else {
-                return std::tuple{ ScalarZero{}... };
-            }
+            static_assert(varId >= 0, "Variable IDs must be non-negative.");    
+            return ZeroScalar<T>{};
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             return std::string("0");
         }
 
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
             return T{};
         }
     };
 
-    template<VarIDType varId, ScalarExprType E>
+    template<VarIDType varId, ExprType E>
     [[nodiscard]]
     CUDA_COMPATIBLE constexpr auto derivate(const E& expr) {
         static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
@@ -203,7 +158,7 @@ namespace TinyLA {
     }
 
     template<ScalarType T>
-    class ScalarConstant : public AbstractScalarExpr<ScalarConstant<T>> {
+    class ScalarConstant : public AbstractExpr<ScalarConstant<T>> {
         public:
 
         CUDA_COMPATIBLE inline constexpr ScalarConstant(T value) : m_value(value) {}
@@ -212,18 +167,18 @@ namespace TinyLA {
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable IDs must be non-negative.");
-            return ScalarZero<T>{};
+            return ZeroScalar<T>{};
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             return std::format("{}", m_value);
         }
 
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
             return m_value;
         }
 
@@ -231,48 +186,64 @@ namespace TinyLA {
         T m_value;
     };
 
+    //---------------------------------------------------------------------------------------
+    // Math constants:
+
+    /*
+        Pi constant
+    */
+    template <ScalarType T>
+    constexpr auto PI = ScalarConstant<T>{3.14159265358979323846264338327950288419716939937510582097494459230781640628};
+
+    /*
+        Euler number
+    */
+    template <ScalarType T>
+    constexpr auto Euler = ScalarConstant<T>{2.718281828459045235360287471352662497757247093699959574966967627724076630353};
+
+
     template<ScalarType T>
-    class ScalarUnit : public AbstractScalarExpr<ScalarUnit<T>> {
+    class UnitScalar : public AbstractExpr<UnitScalar<T>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarUnit() {}
+        CUDA_COMPATIBLE inline constexpr UnitScalar() {}
 
         template<VarIDType varId>
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable IDs must be non-negative.");
-            return ScalarZero{};
+            return ZeroScalar<T>{};
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             return std::string("1");
         }
 
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
             return static_cast<T>(1);
         }
     };
 
     template<ScalarType T, VarIDType varId = -1>
-    class Scalar : public AbstractScalarExpr<Scalar<T, varId>> {
+    class Scalar : public AbstractExpr<Scalar<T, varId>> {
         public:
 
         static constexpr bool variable_data = true;
 
         template<class _SE>
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr Scalar(const AbstractScalarExpr<_SE>& expr) : m_value(expr.eval()) {}
+        CUDA_COMPATIBLE inline constexpr Scalar(const AbstractExpr<_SE>& expr) : m_value(expr.eval()) {}
 
         [[nodiscard]]
         CUDA_COMPATIBLE inline constexpr Scalar(T value = T{}) : m_value{value} {}
 
         template<class _SE>
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto operator=(const AbstractScalarExpr<_SE>& expr) {
+        CUDA_COMPATIBLE inline constexpr auto operator=(const AbstractExpr<_SE>& expr) {
             m_value = expr.eval();
             return *this;
         }
@@ -293,20 +264,20 @@ namespace TinyLA {
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(diffVarId >= 0, "Variable IDs must be non-negative.");
             if constexpr (diffVarId == varId) {
-                return ScalarUnit<T>();
+                return UnitScalar<T>();
             }
             else {
-                return ScalarZero<T>();
+                return ZeroScalar<T>();
             }
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             return (varId == -1)? std::format("{}", m_value) : std::format("s_{}", varId);
         }
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
             return m_value;
         }
 
@@ -314,11 +285,143 @@ namespace TinyLA {
         T m_value;
     };
 
-    template<class E1, class E2>
-    class ScalarSum : public AbstractScalarExpr<ScalarSum<E1, E2>> {
+    template<ScalarType T, uint32_t Row, uint32_t Col, VarIDType varId = -1>
+    class Matrix : public AbstractExpr<Matrix<T, Row, Col, varId>, Row, Col> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarSum(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        static constexpr bool variable_data = true;
+
+        template<class _SE>
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr Matrix(const AbstractExpr<_SE>& expr) {
+            for (size_t r = 0; r < Row; ++r) {
+                for (size_t c = 0; c < Col; ++c) {
+                    m_data[r][c] = expr.eval(r, c);
+                }
+            }
+        }
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr Matrix(const std::initializer_list<std::initializer_list<T>>& values) : m_data{} {
+            size_t r = 0;
+            for (const auto& row : values) {
+                size_t c = 0;
+                for (const auto& val : row) {
+                    m_data[r][c] = val;
+                    c++;
+                }
+                r++;
+            }
+        }
+
+        template<class _SE>
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto operator=(const AbstractExpr<_SE>& expr) {
+            m_data = expr.eval();
+            return *this;
+        }
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto operator=(T value) {
+            m_data = value;
+            return *this;
+        }
+
+        template<VarIDType diffVarId>
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr inline auto derivate() const {
+            static_assert(diffVarId >= 0, "Variable IDs must be non-negative.");
+            if constexpr (diffVarId == varId) {
+                return UnitScalar<T>();
+            }
+            else {
+                return ZeroScalar<T>();
+            }
+        }
+
+        [[nodiscard]]
+        CUDA_HOST constexpr inline std::string to_string() const {
+            std::stringstream strStream;
+            for (size_t r = 0; r < Row; ++r) {
+                for (size_t c = 0; c < Col; ++c) {
+                    if (c > 0) {
+                        strStream << ", ";
+                    }
+                    strStream << m_data[r][c];
+                }
+                strStream << std::endl;
+            }
+            return (varId == -1)? strStream.str() : std::format("M_{}", varId);
+        }
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r, uint32_t c) const {
+            return m_data[r][c];
+        }
+
+        private:
+        T m_data[Row][Col];
+    };
+
+    template<ScalarType T, uint32_t N>
+    class IdentityMatrix : public AbstractExpr<IdentityMatrix<T, N>, N, N> {
+        public:
+
+        static constexpr bool variable_data = false;
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr IdentityMatrix() {}
+
+        template<VarIDType diffVarId>
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr inline auto derivate() const {
+            static_assert(diffVarId >= 0, "Variable IDs must be non-negative.");
+            return ZeroScalar<T>();
+        }
+
+        [[nodiscard]]
+        CUDA_HOST constexpr inline std::string to_string() const {
+            return std::string("I");
+        }
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r, uint32_t c) const {
+            return (r == c) ? T{1} : T{};
+        }
+    };
+
+    template<ScalarType T, uint32_t Row, uint32_t Col>
+    class ZeroMatrix : public AbstractExpr<ZeroMatrix<T, Row, Col>, Row, Col> {
+        public:
+
+        static constexpr bool variable_data = false;
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr ZeroMatrix() {}
+
+        template<VarIDType diffVarId>
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr inline auto derivate() const {
+            static_assert(diffVarId >= 0, "Variable IDs must be non-negative.");
+            return ZeroScalar<T>();
+        }
+
+        [[nodiscard]]
+        CUDA_HOST constexpr inline std::string to_string() const {
+            return std::string("0");
+        }
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r, uint32_t c) const {
+            return T{};
+        }
+    };
+
+    template<class E1, class E2>
+    class AdditionExpr : public AbstractExpr<AdditionExpr<E1, E2>, E1::rows, E2::cols> {
+        public:
+
+        CUDA_COMPATIBLE inline constexpr AdditionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -326,17 +429,17 @@ namespace TinyLA {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarZero<int>{};
+            if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar> && is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
+                return ZeroScalar<int>{};
             }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>) {
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar>) {
                 return expr2_derivative;
             }
-            else if constexpr (is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
+            else if constexpr (is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
                 return expr1_derivative;
             }
             else {
-                return ScalarSum<
+                return AdditionExpr<
                     decltype(expr1_derivative),
                     decltype(expr2_derivative)
                 >{
@@ -347,14 +450,14 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> && is_specialization_v<E2, ScalarZero>) {
+        CUDA_HOST constexpr inline std::string to_string() const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> && is_specialization_v<E2, ZeroScalar>) {
                 return "";
             }
-            else if constexpr (is_specialization_v<E1, ScalarZero>) {
+            else if constexpr (is_specialization_v<E1, ZeroScalar>) {
                 return m_expr2.to_string();
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
                 return m_expr1.to_string();
             }
             else {
@@ -375,18 +478,18 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> && is_specialization_v<E2, ScalarZero>) {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> && is_specialization_v<E2, ZeroScalar>) {
                 return 0;
             }
-            else if constexpr (is_specialization_v<E1, ScalarZero>) {
-                return m_expr2.eval();
+            else if constexpr (is_specialization_v<E1, ZeroScalar>) {
+                return m_expr2.eval(r, c);
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
-                return m_expr1.eval();
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
+                return m_expr1.eval(r, c);
             }
             else {
-                return m_expr1.eval() + m_expr2.eval();
+                return m_expr1.eval(r, c) + m_expr2.eval(r, c);
             }
         }
 
@@ -395,40 +498,46 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ScalarExprType E1, ScalarExprType E2>
+    template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator+(const E1& expr1, const E2& expr2) {
-        return ScalarSum<E1, E2>{expr1, expr2};
+        static_assert(
+            (is_eq_shape_v<E1, E2>
+            || is_scalar_shape_v<E1>
+            || is_scalar_shape_v<E2>),
+            "Incompatible matrix dimensions"
+        );
+        return AdditionExpr<E1, E2>{expr1, expr2};
     }
 
-    template<ScalarExprType E, ScalarType S>
+    template<ExprType E, ScalarType S>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator+(const E& expr, S a) {
-        return ScalarSum<E, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
+        return AdditionExpr<E, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
     }
 
-    template<ScalarType S, ScalarExprType E>
+    template<ScalarType S, ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator+(S a, const E& expr) {
-        return ScalarSum<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
+        return AdditionExpr<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
     }
 
     template<class E>
-    class ScalarNegate : public AbstractScalarExpr<ScalarNegate<E>> {
+    class NegationExpr : public AbstractExpr<NegationExpr<E>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarNegate(const E& expr) : m_expr(expr) {}
+        CUDA_COMPATIBLE inline constexpr NegationExpr(const E& expr) : m_expr(expr) {}
 
         template<VarIDType varId>
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr_derivative = m_expr.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr_derivative), ScalarZero>) {
-                return ScalarZero<int>{};
+            if constexpr (is_specialization_v<decltype(expr_derivative), ZeroScalar>) {
+                return ZeroScalar<int>{};
             }
             else {
-                return ScalarNegate<
+                return NegationExpr<
                     decltype(expr_derivative)
                 >{
                     expr_derivative
@@ -437,7 +546,7 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             std::string str_expr = m_expr.to_string();
             if (str_expr.empty()) {
                 return std::format("");
@@ -450,12 +559,12 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            if constexpr (is_specialization_v<E, ScalarZero>) {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            if constexpr (is_specialization_v<E, ZeroScalar>) {
                 return 0;
             }
             else {
-                return -m_expr.eval();
+                return -m_expr.eval(r, c);
             }
         }
 
@@ -463,17 +572,17 @@ namespace TinyLA {
         std::conditional_t< (E::variable_data), const E&, const E> m_expr;
     };
 
-    template<ScalarExprType E>
+    template<ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator-(const E& expr) {
-        return ScalarNegate<E>{expr};
+        return NegationExpr<E>{expr};
     }
 
     template<class E1, class E2>
-    class ScalarSubtraction : public AbstractScalarExpr<ScalarSubtraction<E1, E2>> {
+    class SubtractionExpr : public AbstractExpr<SubtractionExpr<E1, E2>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarSubtraction(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr SubtractionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -481,17 +590,17 @@ namespace TinyLA {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarZero<int>{};
+            if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar> && is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
+                return ZeroScalar<int>{};
             }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>) {
-                return ScalarNegate<decltype(expr2_derivative)>{expr2_derivative};
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar>) {
+                return NegationExpr<decltype(expr2_derivative)>{expr2_derivative};
             }
-            else if constexpr (is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
+            else if constexpr (is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
                 return expr1_derivative;
             }
             else {
-                return ScalarSubtraction<
+                return SubtractionExpr<
                     decltype(expr1_derivative),
                     decltype(expr2_derivative)
                 >{
@@ -502,14 +611,14 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> && is_specialization_v<E2, ScalarZero>) {
+        CUDA_HOST constexpr inline std::string to_string() const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> && is_specialization_v<E2, ZeroScalar>) {
                 return "";
             }
-            else if constexpr (is_specialization_v<E1, ScalarZero>) {
+            else if constexpr (is_specialization_v<E1, ZeroScalar>) {
                 return std::format("-{}", m_expr2.to_string());
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
                 return m_expr1.to_string();
             }
             else {
@@ -530,18 +639,18 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> && is_specialization_v<E2, ScalarZero>) {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> && is_specialization_v<E2, ZeroScalar>) {
                 return 0;
             }
-            else if constexpr (is_specialization_v<E1, ScalarZero>) {
-                return -m_expr2.eval();
+            else if constexpr (is_specialization_v<E1, ZeroScalar>) {
+                return -m_expr2.eval(r, c);
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
-                return m_expr1.eval();
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
+                return m_expr1.eval(r, c);
             }
             else {
-                return m_expr1.eval() - m_expr2.eval();
+                return m_expr1.eval(r, c) - m_expr2.eval(r, c);
             }
         }
 
@@ -550,29 +659,29 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ScalarExprType E1, ScalarExprType E2>
+    template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator-(const E1& expr1, const E2& expr2) {
-        return ScalarSubtraction<E1, E2>{expr1, expr2};
+        return SubtractionExpr<E1, E2>{expr1, expr2};
     }
 
-    template<ScalarExprType E, ScalarType S>
+    template<ExprType E, ScalarType S>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator-(const E& expr, S a) {
-        return ScalarSubtraction<E, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
+        return SubtractionExpr<E, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
     }
 
-    template<ScalarType S, ScalarExprType E>
+    template<ScalarType S, ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator-(S a, const E& expr) {
-        return ScalarSubtraction<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
+        return SubtractionExpr<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
     }
 
     template<class E1, class E2>
-    class ScalarProduct : public AbstractScalarExpr<ScalarProduct<E1, E2>> {
+    class ElementwiseProductExpr : public AbstractExpr<ElementwiseProductExpr<E1, E2>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarProduct(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr ElementwiseProductExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -580,17 +689,17 @@ namespace TinyLA {
             static_assert((varId >= 0), "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarUnit> && is_specialization_v<decltype(expr2_derivative), ScalarUnit>) {
-                return ScalarSum<std::remove_cvref_t<decltype(m_expr1)>, std::remove_cvref_t<decltype(m_expr2)>>{
+            if constexpr (is_specialization_v<decltype(expr1_derivative), UnitScalar> && is_specialization_v<decltype(expr2_derivative), UnitScalar>) {
+                return AdditionExpr<std::remove_cvref_t<decltype(m_expr1)>, std::remove_cvref_t<decltype(m_expr2)>>{
                     m_expr1,
                     m_expr2
                 };
             }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarZero<decltype(m_expr1.eval() * m_expr2.eval())>{};
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar> && is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
+                return ZeroScalar<decltype(m_expr1.eval() * m_expr2.eval())>{};
             }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>) {
-                return ScalarProduct<
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar>) {
+                return ElementwiseProductExpr<
                     std::remove_cvref_t<decltype(m_expr1)>,
                     decltype(expr2_derivative)
                 >{
@@ -598,8 +707,8 @@ namespace TinyLA {
                     expr2_derivative
                 };
             }
-            else if constexpr (is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarProduct<
+            else if constexpr (is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
+                return ElementwiseProductExpr<
                     decltype(expr1_derivative),
                     std::remove_cvref_t<decltype(m_expr2)>
                 >{
@@ -608,15 +717,15 @@ namespace TinyLA {
                 };
             }
             else {
-                return ScalarSum{
-                    ScalarProduct<
+                return AdditionExpr{
+                    ElementwiseProductExpr<
                         std::remove_cvref_t<decltype(m_expr1)>,
                         decltype(expr2_derivative)
                     > {
                         m_expr1,
                         expr2_derivative
                     },
-                    ScalarProduct<
+                    ElementwiseProductExpr<
                         decltype(expr1_derivative),
                         std::remove_cvref_t<decltype(m_expr2)>
                     > {
@@ -628,17 +737,17 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> || is_specialization_v<E2, ScalarZero>) {
+        CUDA_HOST constexpr inline std::string to_string() const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> || is_specialization_v<E2, ZeroScalar>) {
                 return "";
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit> && is_specialization_v<E2, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E1, UnitScalar> && is_specialization_v<E2, UnitScalar>) {
                 return "1";
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E1, UnitScalar>) {
                 return m_expr2.to_string();
             }
-            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E2, UnitScalar>) {
                 return m_expr1.to_string();
             }
             else {
@@ -659,7 +768,7 @@ namespace TinyLA {
                     return std::format("{} * ({})", expr1_str, expr2_str);
                 }
                 else if (expr1_str.empty() || expr2_str.empty()) {
-                    return std::format("{}{}", expr1_str, expr2_str);
+                    return std::format("");
                 }
                 else {
                     return std::format("{} * {}", expr1_str, expr2_str);
@@ -670,21 +779,21 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            if constexpr (is_specialization_v<E1, ScalarZero> || is_specialization_v<E2, ScalarZero>) {
-                return decltype(m_expr1.eval() * m_expr2.eval()){};
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            if constexpr (is_specialization_v<E1, ZeroScalar> || is_specialization_v<E2, ZeroScalar>) {
+                return decltype(m_expr1.eval(r, c) * m_expr2.eval(r, c)){};
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit> && is_specialization_v<E2, ScalarUnit>) {
-                return static_cast<decltype(m_expr1.eval() * m_expr2.eval())>(1);
+            else if constexpr (is_specialization_v<E1, UnitScalar> && is_specialization_v<E2, UnitScalar>) {
+                return static_cast<decltype(m_expr1.eval(r, c) * m_expr2.eval(r, c))>(1);
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit>) {
-                return m_expr2.eval();
+            else if constexpr (is_specialization_v<E1, UnitScalar>) {
+                return m_expr2.eval(r, c);
             }
-            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
-                return m_expr1.eval();
+            else if constexpr (is_specialization_v<E2, UnitScalar>) {
+                return m_expr1.eval(r, c);
             }
             else {
-                return m_expr1.eval() * m_expr2.eval();
+                return m_expr1.eval(r, c) * m_expr2.eval(r, c);
             }
         }
 
@@ -693,29 +802,29 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ScalarExprType E1, ScalarExprType E2>
+    template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator*(const E1& expr1, const E2& expr2) {
-        return ScalarProduct<E1, E2>{expr1, expr2};
+        return ElementwiseProductExpr<E1, E2>{expr1, expr2};
     }
 
-    template<ScalarExprType E1, ScalarType S>
+    template<ExprType E1, ScalarType S>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator*(const E1& expr, S a) {
-        return ScalarProduct<E1, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
+        return ElementwiseProductExpr<E1, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
     }
 
-    template<ScalarType S, ScalarExprType E>
+    template<ScalarType S, ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator*(S a, const E& expr) {
-        return ScalarProduct<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
+        return ElementwiseProductExpr<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
     }
 
     template<class E1, class E2>
-    class ScalarDivision : public AbstractScalarExpr<ScalarDivision<E1, E2>> {
+    class DivisionExpr : public AbstractExpr<DivisionExpr<E1, E2>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarDivision(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr DivisionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -723,19 +832,19 @@ namespace TinyLA {
             static_assert((varId >= 0), "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarZero<decltype(m_expr1.eval() / m_expr2.eval())>{};
+            if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar> && is_specialization_v<decltype(expr2_derivative), ZeroScalar>) {
+                return ZeroScalar<decltype(m_expr1.eval() / m_expr2.eval())>{};
             }
             else {
-                auto numerator = ScalarSubtraction{
-                    ScalarProduct<
+                auto numerator = SubtractionExpr{
+                    ElementwiseProductExpr<
                         decltype(expr1_derivative),
                         std::remove_cvref_t<decltype(m_expr2)>
                     > {
                         expr1_derivative,
                         m_expr2
                     },
-                    ScalarProduct<
+                    ElementwiseProductExpr<
                         std::remove_cvref_t<decltype(m_expr1)>,
                         decltype(expr2_derivative)
                     > {
@@ -743,14 +852,14 @@ namespace TinyLA {
                         expr2_derivative
                     }
                 };
-                auto denominator = ScalarProduct<
+                auto denominator = ElementwiseProductExpr<
                     std::remove_cvref_t<decltype(m_expr2)>,
                     std::remove_cvref_t<decltype(m_expr2)>
                 > {
                     m_expr2,
                     m_expr2
                 };
-                return ScalarDivision<decltype(numerator), decltype(denominator)>{
+                return DivisionExpr<decltype(numerator), decltype(denominator)>{
                     numerator,
                     denominator
                 };
@@ -758,17 +867,17 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            if constexpr (is_specialization_v<E1, ScalarZero>) {
+        CUDA_HOST constexpr inline std::string to_string() const {
+            if constexpr (is_specialization_v<E1, ZeroScalar>) {
                 return "";
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
                 throw std::runtime_error("[Division by zero in scalar expression.]");
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit> && is_specialization_v<E2, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E1, UnitScalar> && is_specialization_v<E2, UnitScalar>) {
                 return "1";
             }
-            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E2, UnitScalar>) {
                 return m_expr1.to_string();
             }
             else {
@@ -803,15 +912,15 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            if constexpr (is_specialization_v<E2, ScalarZero>) {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            if constexpr (is_specialization_v<E2, ZeroScalar>) {
                 assert("Division by zero in scalar expression.");
             }
-            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
-                return m_expr1.eval();
+            else if constexpr (is_specialization_v<E2, UnitScalar>) {
+                return m_expr1.eval(r, c);
             }
             else {
-                return m_expr1.eval() / m_expr2.eval();
+                return m_expr1.eval(r, c) / m_expr2.eval(r, c);
             }
         }
 
@@ -820,40 +929,40 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ScalarExprType E1, ScalarExprType E2>
+    template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator/(const E1& expr1, const E2& expr2) {
-        return ScalarDivision<E1, E2>{expr1, expr2};
+        return DivisionExpr<E1, E2>{expr1, expr2};
     }
 
-    template<ScalarExprType E1, ScalarType S>
+    template<ExprType E1, ScalarType S>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator/(const E1& expr, S a) {
-        return ScalarDivision<E1, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
+        return DivisionExpr<E1, ScalarConstant<S>>{expr, ScalarConstant<S>{a}};
     }
 
-    template<ScalarType S, ScalarExprType E>
+    template<ScalarType S, ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator/(S a, const E& expr) {
-        return ScalarDivision<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
+        return DivisionExpr<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
     }
 
         template<class E>
-    class ScalarLog : public AbstractScalarExpr<ScalarLog<E>> {
+    class NaturalLogExpr : public AbstractExpr<NaturalLogExpr<E>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarLog(const E& expr) : m_expr(expr) {}
+        CUDA_COMPATIBLE inline constexpr NaturalLogExpr(const E& expr) : m_expr(expr) {}
 
         template<VarIDType varId>
         [[nodiscard]]
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr_derivative = m_expr.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr_derivative), ScalarZero>) {
-                return ScalarZero<decltype(m_expr.eval())>{};
+            if constexpr (is_specialization_v<decltype(expr_derivative), ZeroScalar>) {
+                return ZeroScalar<decltype(m_expr.eval())>{};
             }
             else {
-                return ScalarDivision<
+                return DivisionExpr<
                     decltype(expr_derivative),
                     std::remove_cvref_t<decltype(m_expr)>
                 >{
@@ -864,7 +973,7 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
+        CUDA_HOST constexpr inline std::string to_string() const {
             std::string str_expr = m_expr.to_string();
             if (str_expr.empty()) {
                 return std::format("[]Log of zero expression.]");
@@ -877,9 +986,9 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            auto expr_value = m_expr.eval();
-            if constexpr (is_specialization_v<E, ScalarZero>) {
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            auto expr_value = m_expr.eval(r, c);
+            if constexpr (is_specialization_v<E, ZeroScalar>) {
                 throw std::runtime_error("[Logarithm of zero in scalar expression.]");
             }
             else {
@@ -891,17 +1000,17 @@ namespace TinyLA {
         std::conditional_t<(E::variable_data), const E&, const E> m_expr;
     };
 
-    template<ScalarExprType E>
+    template<ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto log(const E& expr) {
-        return ScalarLog<E>{expr};
+        return NaturalLogExpr<E>{expr};
     }
 
     template<class E1, class E2>
-    class ScalarPow : public AbstractScalarExpr<ScalarPow<E1, E2>> {
+    class ElementwisePowExpr : public AbstractExpr<ElementwisePowExpr<E1, E2>> {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ScalarPow(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr ElementwisePowExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -909,30 +1018,30 @@ namespace TinyLA {
             static_assert((varId >= 0), "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<E2, ScalarUnit>) {
+            if constexpr (is_specialization_v<E2, UnitScalar>) {
                 return expr1_derivative;
             }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>)
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ZeroScalar>)
                  {
-                return ScalarZero<decltype(std::pow(m_expr1.eval(), m_expr2.eval()))>{};
+                return ZeroScalar<decltype(std::pow(m_expr1.eval(), m_expr2.eval()))>{};
             }
             else {
-                return ScalarProduct {
-                    ScalarPow<E1, E2> {
+                return ElementwiseProductExpr {
+                    ElementwisePowExpr<E1, E2> {
                         m_expr1,
                         m_expr2
                     },
-                    ScalarSum {
-                        ScalarProduct {
+                    AdditionExpr {
+                        ElementwiseProductExpr {
                             expr1_derivative,
-                            ScalarDivision {
+                            DivisionExpr {
                                 m_expr2,
                                 m_expr1
                             }
                         },
-                        ScalarProduct {
+                        ElementwiseProductExpr {
                             expr2_derivative,
-                            ScalarLog {
+                            NaturalLogExpr {
                                 m_expr1
                             }
                         }
@@ -942,17 +1051,17 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
-        CUDA_HOST constexpr inline auto to_string() const {
-            if constexpr (is_specialization_v<E1, ScalarZero>) {
+        CUDA_HOST constexpr inline std::string to_string() const {
+            if constexpr (is_specialization_v<E1, ZeroScalar>) {
                 return "";
             }
-            else if constexpr (is_specialization_v<E2, ScalarZero>) {
+            else if constexpr (is_specialization_v<E2, ZeroScalar>) {
                 return "1";
             }
-            else if constexpr (is_specialization_v<E1, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E1, UnitScalar>) {
                 return "1";
             }
-            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
+            else if constexpr (is_specialization_v<E2, UnitScalar>) {
                 return m_expr1.to_string();
             }
             else {
@@ -987,8 +1096,8 @@ namespace TinyLA {
         static constexpr bool variable_data = false;
 
         [[nodiscard]]
-        CUDA_COMPATIBLE inline constexpr auto eval() const {
-            return std::pow(m_expr1.eval(), m_expr2.eval());
+        CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
+            return std::pow(m_expr1.eval(r, c), m_expr2.eval(r, c));
         }
 
         private:
@@ -996,22 +1105,22 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ScalarExprType E1, ScalarExprType E2>
+    template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto pow(const E1& base, const E2& exponent) {
-        return ScalarPow<E1, E2>{base, exponent};
+        return ElementwisePowExpr<E1, E2>{base, exponent};
     }
 
-    template<ScalarExprType E, ScalarType S>
+    template<ExprType E, ScalarType S>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto pow(const E& base, S exponent) {
-        return ScalarPow<E, ScalarConstant<S>>{base, exponent};
+        return ElementwisePowExpr<E, ScalarConstant<S>>{base, exponent};
     }
 
-    template<ScalarType S, ScalarExprType E>
+    template<ScalarType S, ExprType E>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto pow(S base, const E& exponent) {
-        return ScalarPow<ScalarConstant<S>, E>{base, exponent};
+        return ElementwisePowExpr<ScalarConstant<S>, E>{base, exponent};
     }
 
 }
