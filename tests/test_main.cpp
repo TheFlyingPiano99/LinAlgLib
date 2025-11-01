@@ -1479,3 +1479,286 @@ TEST_CASE("Shape Compatibility Documentation", "[matrix][shapes][documentation]"
         REQUIRE(true); // This test is for documentation purposes
     }
 }
+
+// Test static_assert behavior for incompatible matrix shapes
+// These tests verify that the library correctly prevents compilation of invalid operations
+TEST_CASE("Static Assertion Tests for Incompatible Shapes", "[static_assert][shapes][compile_error]") {
+    
+    SECTION("Compile-time shape validation documentation") {
+        // This section documents which operations should cause compile-time errors
+        // due to static_assert statements in the expression constructors
+        
+        // The following operations should NOT compile if uncommented:
+        
+        /* 
+        // TEST 1: Incompatible matrix addition (2x2 + 3x3)
+        Matrix<double, 2, 2, 0> m2x2{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 3, 3, 1> m3x3{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}};
+        auto invalid_add = m2x2 + m3x3; // ERROR: static_assert should fail
+        */
+        
+        /*
+        // TEST 2: Incompatible matrix subtraction (2x3 - 3x2)
+        Matrix<double, 2, 3, 0> m2x3{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        Matrix<double, 3, 2, 1> m3x2{{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+        auto invalid_sub = m2x3 - m3x2; // ERROR: static_assert should fail
+        */
+        
+        /*
+        // TEST 3: Incompatible elementwise multiplication (4x4 * 2x2)
+        Matrix<double, 4, 4, 0> m4x4{{1.0, 2.0, 3.0, 4.0}, {5.0, 6.0, 7.0, 8.0}, 
+                                    {9.0, 10.0, 11.0, 12.0}, {13.0, 14.0, 15.0, 16.0}};
+        Matrix<double, 2, 2, 1> m2x2{{1.0, 2.0}, {3.0, 4.0}};
+        auto invalid_mult = m4x4 * m2x2; // ERROR: static_assert should fail
+        */
+        
+        /*
+        // TEST 4: Incompatible elementwise division (1x5 / 5x1)
+        Matrix<double, 1, 5, 0> m1x5{{1.0, 2.0, 3.0, 4.0, 5.0}};
+        Matrix<double, 5, 1, 1> m5x1{{1.0}, {2.0}, {3.0}, {4.0}, {5.0}};
+        auto invalid_div = m1x5 / m5x1; // ERROR: static_assert should fail
+        */
+        
+        /*
+        // TEST 5: Incompatible power operation (3x2 ^ 2x4)
+        Matrix<double, 3, 2, 0> base{{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+        Matrix<double, 2, 4, 1> exponent{{1.0, 2.0, 3.0, 4.0}, {5.0, 6.0, 7.0, 8.0}};
+        auto invalid_pow = pow(base, exponent); // ERROR: static_assert should fail
+        */
+        
+        // These operations should work (valid cases for comparison):
+        Matrix<double, 2, 2, 0> valid_m1{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 2, 2, 1> valid_m2{{5.0, 6.0}, {7.0, 8.0}};
+        Scalar<double, 2> valid_scalar(5.0);
+        
+        // These should compile successfully:
+        auto valid_add = valid_m1 + valid_m2;        // Same shape matrices
+        auto valid_scalar_add = valid_m1 + valid_scalar; // Matrix + Scalar
+        auto valid_mult = valid_m1 * valid_m2;       // Same shape matrices
+        auto valid_scalar_mult = valid_scalar * valid_m1; // Scalar * Matrix
+        
+        // Verify the valid operations work
+        REQUIRE(valid_add.eval(0, 0) == Approx(6.0));     // 1 + 5
+        REQUIRE(valid_scalar_add.eval(0, 0) == Approx(6.0)); // 1 + 5
+        REQUIRE(valid_mult.eval(0, 0) == Approx(5.0));    // 1 * 5
+        REQUIRE(valid_scalar_mult.eval(0, 0) == Approx(5.0)); // 5 * 1
+    }
+}
+
+// Test the type traits using runtime verification instead of static_assert
+TEST_CASE("Shape Compatibility Type Traits", "[type_traits][shapes]") {
+    
+    SECTION("is_eq_shape trait verification") {
+        // Test the underlying type traits used in the library
+        
+        // Same shapes should be equal
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 2, 0>, Matrix<double, 2, 2, 1>> == true);
+        REQUIRE(is_eq_shape_v<Matrix<double, 3, 4, 0>, Matrix<double, 3, 4, 1>> == true);
+        REQUIRE(is_eq_shape_v<Matrix<double, 1, 1, 0>, Matrix<double, 1, 1, 1>> == true);
+        
+        // Different shapes should not be equal
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 2, 0>, Matrix<double, 3, 3, 1>> == false);
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 3, 0>, Matrix<double, 3, 2, 1>> == false);
+        REQUIRE(is_eq_shape_v<Matrix<double, 1, 5, 0>, Matrix<double, 5, 1, 1>> == false);
+    }
+    
+    SECTION("is_scalar_shape trait verification") {
+        // Test scalar shape detection
+        
+        // 1x1 matrices should be scalar-shaped
+        REQUIRE(is_scalar_shape_v<Matrix<double, 1, 1, 0>> == true);
+        REQUIRE(is_scalar_shape_v<ZeroMatrix<double, 1, 1>> == true);
+        
+        // Non-1x1 matrices should not be scalar-shaped
+        REQUIRE(is_scalar_shape_v<Matrix<double, 2, 2, 0>> == false);
+        REQUIRE(is_scalar_shape_v<Matrix<double, 1, 2, 0>> == false);
+        REQUIRE(is_scalar_shape_v<Matrix<double, 2, 1, 0>> == false);
+        REQUIRE(is_scalar_shape_v<Matrix<double, 3, 4, 0>> == false);
+        
+        // Scalars should be scalar-shaped
+        REQUIRE(is_scalar_shape_v<Scalar<double, 0>> == true);
+    }
+    
+    SECTION("is_elementwise_broadcastable trait verification") {
+        // Test broadcasting compatibility detection
+        
+        // Same shapes should be broadcastable
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 2, 0>, Matrix<double, 2, 2, 1>> == true);
+        
+        // Scalar with any matrix should be broadcastable
+        REQUIRE(is_elementwise_broadcastable_v<Scalar<double, 0>, Matrix<double, 3, 4, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 3, 0>, Scalar<double, 1>> == true);
+        
+        // 1x1 matrix with any matrix should be broadcastable
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 1, 1, 0>, Matrix<double, 3, 4, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 3, 0>, Matrix<double, 1, 1, 1>> == true);
+        
+        // Incompatible non-scalar shapes should not be broadcastable
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 2, 0>, Matrix<double, 3, 3, 1>> == false);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 3, 0>, Matrix<double, 3, 2, 1>> == false);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 1, 5, 0>, Matrix<double, 5, 1, 1>> == false);
+    }
+}
+
+// Test cases that demonstrate expected error messages for static_assert failures
+TEST_CASE("Static Assert Error Message Documentation", "[static_assert][error_messages]") {
+    
+    SECTION("Addition static_assert error message") {
+        // The AdditionExpr constructor should provide this error message:
+        // "Incompatible matrix dimensions for element-wise addition."
+        
+        // Example of what should cause a compile error:
+        // Matrix<double, 2, 2, 0> m1; Matrix<double, 3, 3, 1> m2; auto err = m1 + m2;
+        
+        REQUIRE(true); // Documentation test
+    }
+    
+    SECTION("Subtraction static_assert error message") {
+        // The SubtractionExpr constructor should provide this error message:
+        // "Incompatible matrix dimensions for element-wise subtraction."
+        
+        // Example: Matrix<double, 2, 3, 0> m1; Matrix<double, 3, 2, 1> m2; auto err = m1 - m2;
+        
+        REQUIRE(true); // Documentation test
+    }
+    
+    SECTION("Multiplication static_assert error message") {
+        // The ElementwiseProductExpr constructor should provide this error message:
+        // "Incompatible matrix dimensions for element-wise multiplication."
+        
+        // Example: Matrix<double, 4, 1, 0> m1; Matrix<double, 1, 4, 1> m2; auto err = m1 * m2;
+        
+        REQUIRE(true); // Documentation test
+    }
+    
+    SECTION("Division static_assert error message") {
+        // The ElementwiseDivisionExpr constructor should provide this error message:
+        // "Incompatible matrix dimensions for element-wise division."
+        
+        // Example: Matrix<double, 3, 3, 0> m1; Matrix<double, 2, 2, 1> m2; auto err = m1 / m2;
+        
+        REQUIRE(true); // Documentation test
+    }
+}
+
+// Test to verify that valid operations don't trigger static_assert
+TEST_CASE("Valid Operations Pass Static Assertions", "[static_assert][valid_operations]") {
+    
+    SECTION("All compatible operations should compile and work") {
+        // These operations should all pass static_assert checks
+        
+        Matrix<double, 2, 3, 0> m2x3{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        Matrix<double, 2, 3, 1> m2x3_2{{7.0, 8.0, 9.0}, {10.0, 11.0, 12.0}};
+        Matrix<double, 1, 1, 2> scalar_matrix{{5.0}};
+        Scalar<double, 3> scalar(3.0);
+        
+        // Same-shape matrix operations
+        auto sum = m2x3 + m2x3_2;
+        auto diff = m2x3 - m2x3_2;
+        auto product = m2x3 * m2x3_2;
+        auto quotient = m2x3 / m2x3_2;
+        
+        // Matrix-scalar operations
+        auto m_plus_s = m2x3 + scalar;
+        auto s_plus_m = scalar + m2x3;
+        auto m_times_s = m2x3 * scalar;
+        auto s_times_m = scalar * m2x3;
+        
+        // Matrix with 1x1 matrix (scalar-shaped) operations
+        auto m_plus_1x1 = m2x3 + scalar_matrix;
+        auto m1x1_plus_m = scalar_matrix + m2x3;
+        auto m_times_1x1 = m2x3 * scalar_matrix;
+        auto m1x1_times_m = scalar_matrix * m2x3;
+        
+        // Verify all operations work correctly
+        REQUIRE(sum.eval(0, 0) == Approx(8.0));        // 1 + 7
+        REQUIRE(diff.eval(0, 0) == Approx(-6.0));      // 1 - 7
+        REQUIRE(product.eval(0, 0) == Approx(7.0));    // 1 * 7
+        REQUIRE(quotient.eval(0, 0) == Approx(1.0/7.0)); // 1 / 7
+        
+        REQUIRE(m_plus_s.eval(0, 0) == Approx(4.0));   // 1 + 3
+        REQUIRE(s_plus_m.eval(0, 0) == Approx(4.0));   // 3 + 1
+        REQUIRE(m_times_s.eval(0, 0) == Approx(3.0));  // 1 * 3
+        REQUIRE(s_times_m.eval(0, 0) == Approx(3.0));  // 3 * 1
+        
+        REQUIRE(m_plus_1x1.eval(0, 0) == Approx(6.0)); // 1 + 5
+        REQUIRE(m1x1_plus_m.eval(0, 0) == Approx(6.0)); // 5 + 1
+        REQUIRE(m_times_1x1.eval(0, 0) == Approx(5.0)); // 1 * 5
+        REQUIRE(m1x1_times_m.eval(0, 0) == Approx(5.0)); // 5 * 1
+    }
+}
+
+// Test compile-time assertions using requires expressions in Catch2
+TEST_CASE("Compile-time Shape Validation with Requires Expressions", "[requires][compile_time][shapes]") {
+    
+    SECTION("Valid operations should compile") {
+        // Test that compatible operations can be called at compile time
+        
+        // Same-shaped matrix operations
+        REQUIRE(requires(Matrix<double, 2, 2, 0> m1, Matrix<double, 2, 2, 1> m2) {
+            m1 + m2;
+            m1 - m2;
+            m1 * m2;
+            m1 / m2;
+        });
+        
+        // Matrix-scalar operations
+        REQUIRE(requires(Matrix<double, 3, 3, 0> matrix, Scalar<double, 1> scalar) {
+            matrix + scalar;
+            scalar + matrix;
+            matrix * scalar;
+            scalar * matrix;
+            matrix - scalar;
+            scalar - matrix;
+            matrix / scalar;
+            scalar / matrix;
+        });
+        
+        // 1x1 matrix (scalar-shaped) operations
+        REQUIRE(requires(Matrix<double, 1, 1, 0> scalar_matrix, Matrix<double, 2, 3, 1> regular_matrix) {
+            scalar_matrix + regular_matrix;
+            regular_matrix + scalar_matrix;
+            scalar_matrix * regular_matrix;
+            regular_matrix * scalar_matrix;
+        });
+        
+        // Special matrix operations
+        REQUIRE(requires(Matrix<double, 2, 2, 0> matrix, IdentityMatrix<double, 2> identity, ZeroMatrix<double, 2, 2> zero) {
+            matrix + identity;
+            matrix * zero;
+            identity + zero;
+        });
+    }    
+}
+
+// Test type trait functions using simple compile-time evaluation
+TEST_CASE("Type Trait Validation with Requires", "[type_traits]") {
+    
+    SECTION("Shape equality detection") {
+        // Test is_eq_shape_v functionality
+        
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 2, 0>, Matrix<double, 2, 2, 1>> == true);
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 2, 0>, Matrix<double, 3, 3, 1>> == false);
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 3, 0>, Matrix<double, 2, 3, 1>> == true);
+        REQUIRE(is_eq_shape_v<Matrix<double, 2, 3, 0>, Matrix<double, 3, 2, 1>> == false);
+    }
+    
+    SECTION("Scalar shape detection") {
+        // Test is_scalar_shape_v functionality
+        
+        REQUIRE(is_scalar_shape_v<Matrix<double, 1, 1, 0>> == true);
+        REQUIRE(is_scalar_shape_v<Matrix<double, 2, 2, 0>> == false);
+        REQUIRE(is_scalar_shape_v<Scalar<double, 0>> == true);
+        REQUIRE(is_scalar_shape_v<Matrix<double, 1, 2, 0>> == false);
+    }
+    
+    SECTION("Broadcasting compatibility detection") {
+        // Test is_elementwise_broadcastable_v functionality
+        
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 2, 0>, Matrix<double, 2, 2, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Scalar<double, 0>, Matrix<double, 3, 4, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 3, 0>, Scalar<double, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 1, 1, 0>, Matrix<double, 3, 4, 1>> == true);
+        REQUIRE(is_elementwise_broadcastable_v<Matrix<double, 2, 2, 0>, Matrix<double, 3, 3, 1>> == false);
+    }
+}

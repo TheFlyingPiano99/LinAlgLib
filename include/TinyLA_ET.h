@@ -432,10 +432,10 @@ namespace TinyLA {
         }
     };
 
-    template<class E1, class E2>
+    template<class E1, class E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     class AdditionExpr : public AbstractExpr<AdditionExpr<E1, E2>,
         std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
-        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols> 
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols>
     {
         public:
 
@@ -520,7 +520,7 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ExprType E1, ExprType E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator+(const E1& expr1, const E2& expr2) {
         return AdditionExpr<E1, E2>{expr1, expr2};
@@ -594,7 +594,7 @@ namespace TinyLA {
         return NegationExpr<E>{expr};
     }
 
-    template<class E1, class E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     class SubtractionExpr : public AbstractExpr<SubtractionExpr<E1, E2>,
         std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
         std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols 
@@ -682,7 +682,7 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ExprType E1, ExprType E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator-(const E1& expr1, const E2& expr2) {
         return SubtractionExpr<E1, E2>{expr1, expr2};
@@ -832,7 +832,7 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ExprType E1, ExprType E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator*(const E1& expr1, const E2& expr2) {
         return ElementwiseProductExpr<E1, E2>{expr1, expr2};
@@ -951,7 +951,7 @@ namespace TinyLA {
         [[nodiscard]]
         CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
             if constexpr (is_specialization_v<E2, ZeroScalar>) {
-                assert("Division by zero in scalar expression.");
+                throw std::runtime_error("Division by zero in scalar expression.");
             }
             else if constexpr (is_specialization_v<E2, UnitScalar>) {
                 return m_expr1.eval(r, c);
@@ -966,7 +966,7 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ExprType E1, ExprType E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator/(const E1& expr1, const E2& expr2) {
         return DivisionExpr<E1, E2>{expr1, expr2};
@@ -1149,7 +1149,7 @@ namespace TinyLA {
         std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
     };
 
-    template<ExprType E1, ExprType E2>
+    template<ExprType E1, ExprType E2> requires(is_elementwise_broadcastable_v<E1, E2>)
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto pow(const E1& base, const E2& exponent) {
         return ElementwisePowExpr<E1, E2>{base, exponent};
