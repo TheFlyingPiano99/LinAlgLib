@@ -108,9 +108,10 @@ int main() {
     print_expr(s1);
     print_expr(s2);
 
-    auto s_res = (s0 * s2 + s1) - 5;
+    auto s_res = log(s0 * s2 + s1) - 5;
     print_expr(s_res);
-    auto s_res2 = derivate<0>(s_res);
+    auto s_res2 = derivate<2>(s_res);
+    std::println("R = {}, C = {}", s_res2.rows, s_res2.cols);
     print_expr(s_res2);
 
     return 0;

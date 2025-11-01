@@ -665,7 +665,7 @@ namespace TinyLA {
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr_derivative = m_expr.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr_derivative), Zero>) {
+            if constexpr (is_zero_v<decltype(expr_derivative)>) {
                 return Zero<int>{};
             }
             else {
@@ -692,7 +692,7 @@ namespace TinyLA {
 
         [[nodiscard]]
         CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r = 0, uint32_t c = 0) const {
-            if constexpr (is_specialization_v<E, Zero>) {
+            if constexpr (is_zero_v<E>) {
                 return 0;
             }
             else {
@@ -884,7 +884,7 @@ namespace TinyLA {
 
         [[nodiscard]]
         CUDA_HOST constexpr inline std::string to_string() const {
-            if constexpr (is_specialization_v<E1, Zero> || is_specialization_v<E2, Zero>) {
+            if constexpr (is_zero_v<E1> || is_zero_v<E2>) {
                 return "";
             }
             else if constexpr (is_identity_v<E1> && is_identity_v<E2>) {
@@ -1254,7 +1254,7 @@ namespace TinyLA {
         CUDA_COMPATIBLE constexpr inline auto derivate() const {
             static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
             auto expr_derivative = m_expr.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr_derivative), Zero>) {
+            if constexpr (is_zero_v<decltype(expr_derivative)>) {
                 return Zero<decltype(m_expr.eval(0, 0))>{};
             }
             else {
