@@ -11,7 +11,7 @@
 void print_expr(const auto& expr) {
     if constexpr (expr.rows == 1 && expr.cols == 1) {
         // Scalar case: simple one-line output
-        std::println("{} = {}", expr.to_string(), expr.eval(0, 0));
+        std::println("{} = {}\n", expr.to_string(), expr.eval(0, 0));
     } else {
         // Matrix/Vector case: formatted multi-line output
         
