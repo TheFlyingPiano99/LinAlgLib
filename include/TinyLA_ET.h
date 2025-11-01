@@ -195,6 +195,13 @@ namespace TinyLA {
         }
     };
 
+    template<VarIDType varId, ScalarExprType E>
+    [[nodiscard]]
+    CUDA_COMPATIBLE constexpr auto derivate(const E& expr) {
+        static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
+        return expr.derivate<varId>();
+    }
+
     template<ScalarType T>
     class ScalarConstant : public AbstractScalarExpr<ScalarConstant<T>> {
         public:
@@ -500,7 +507,7 @@ namespace TinyLA {
                 return "";
             }
             else if constexpr (is_specialization_v<E1, ScalarZero>) {
-                return std::format("- ", m_expr2.to_string());
+                return std::format("-{}", m_expr2.to_string());
             }
             else if constexpr (is_specialization_v<E2, ScalarZero>) {
                 return m_expr1.to_string();
@@ -512,10 +519,10 @@ namespace TinyLA {
                     return std::format("{} - {}", str1, str2);
                 }
                 else if (!str1.empty()) {
-                    return str1;
+                    return std::format("{}", str1);
                 }
                 else {
-                    return str2;
+                    return std::format("-{}", str2);
                 }
             }
         }
@@ -716,49 +723,36 @@ namespace TinyLA {
             static_assert((varId >= 0), "Variable ID for differentiation must be non-negative.");
             auto expr1_derivative = m_expr1.derivate<varId>();
             auto expr2_derivative = m_expr2.derivate<varId>();
-            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarUnit> && is_specialization_v<decltype(expr2_derivative), ScalarUnit>) {
-                return ScalarSubtraction<std::remove_cvref_t<decltype(m_expr1)>, std::remove_cvref_t<decltype(m_expr2)>>{
-                    m_expr1,
-                    m_expr2
-                };
-            }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarZero<decltype(m_expr1.eval() * m_expr2.eval())>{};
-            }
-            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>) {
-                return ScalarProduct<
-                    std::remove_cvref_t<decltype(m_expr1)>,
-                    decltype(expr2_derivative)
-                >{
-                    m_expr1,
-                    expr2_derivative
-                };
-            }
-            else if constexpr (is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
-                return ScalarProduct<
-                    decltype(expr1_derivative),
-                    std::remove_cvref_t<decltype(m_expr2)>
-                >{
-                    expr1_derivative,
-                    m_expr2
-                };
+            if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero> && is_specialization_v<decltype(expr2_derivative), ScalarZero>) {
+                return ScalarZero<decltype(m_expr1.eval() / m_expr2.eval())>{};
             }
             else {
-                return ScalarSum{
-                    ScalarProduct<
-                        std::remove_cvref_t<decltype(m_expr1)>,
-                        decltype(expr2_derivative)
-                    > {
-                        m_expr1,
-                        expr2_derivative
-                    },
+                auto numerator = ScalarSubtraction{
                     ScalarProduct<
                         decltype(expr1_derivative),
                         std::remove_cvref_t<decltype(m_expr2)>
                     > {
                         expr1_derivative,
                         m_expr2
+                    },
+                    ScalarProduct<
+                        std::remove_cvref_t<decltype(m_expr1)>,
+                        decltype(expr2_derivative)
+                    > {
+                        m_expr1,
+                        expr2_derivative
                     }
+                };
+                auto denominator = ScalarProduct<
+                    std::remove_cvref_t<decltype(m_expr2)>,
+                    std::remove_cvref_t<decltype(m_expr2)>
+                > {
+                    m_expr2,
+                    m_expr2
+                };
+                return ScalarDivision<decltype(numerator), decltype(denominator)>{
+                    numerator,
+                    denominator
                 };
             }
         }
@@ -842,6 +836,182 @@ namespace TinyLA {
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator/(S a, const E& expr) {
         return ScalarDivision<ScalarConstant<S>, E>{ScalarConstant<S>{a}, expr};
+    }
+
+        template<class E>
+    class ScalarLog : public AbstractScalarExpr<ScalarLog<E>> {
+        public:
+
+        CUDA_COMPATIBLE inline constexpr ScalarLog(const E& expr) : m_expr(expr) {}
+
+        template<VarIDType varId>
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr inline auto derivate() const {
+            static_assert(varId >= 0, "Variable ID for differentiation must be non-negative.");
+            auto expr_derivative = m_expr.derivate<varId>();
+            if constexpr (is_specialization_v<decltype(expr_derivative), ScalarZero>) {
+                return ScalarZero<decltype(m_expr.eval())>{};
+            }
+            else {
+                return ScalarDivision<
+                    decltype(expr_derivative),
+                    std::remove_cvref_t<decltype(m_expr)>
+                >{
+                    expr_derivative,
+                    m_expr
+                };
+            }
+        }
+
+        [[nodiscard]]
+        CUDA_HOST constexpr inline auto to_string() const {
+            std::string str_expr = m_expr.to_string();
+            if (str_expr.empty()) {
+                return std::format("[]Log of zero expression.]");
+            }
+            else {
+                return std::format("log({})", str_expr);
+            }
+        }
+
+        static constexpr bool variable_data = false;
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto eval() const {
+            auto expr_value = m_expr.eval();
+            if constexpr (is_specialization_v<E, ScalarZero>) {
+                throw std::runtime_error("[Logarithm of zero in scalar expression.]");
+            }
+            else {
+                return std::log(expr_value);
+            }
+        }
+
+        private:
+        std::conditional_t<(E::variable_data), const E&, const E> m_expr;
+    };
+
+    template<ScalarExprType E>
+    CUDA_COMPATIBLE
+    [[nodiscard]] constexpr auto log(const E& expr) {
+        return ScalarLog<E>{expr};
+    }
+
+    template<class E1, class E2>
+    class ScalarPow : public AbstractScalarExpr<ScalarPow<E1, E2>> {
+        public:
+
+        CUDA_COMPATIBLE inline constexpr ScalarPow(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+
+        template<VarIDType varId>
+        [[nodiscard]]
+        CUDA_COMPATIBLE constexpr inline auto derivate() const {
+            static_assert((varId >= 0), "Variable ID for differentiation must be non-negative.");
+            auto expr1_derivative = m_expr1.derivate<varId>();
+            auto expr2_derivative = m_expr2.derivate<varId>();
+            if constexpr (is_specialization_v<E2, ScalarUnit>) {
+                return expr1_derivative;
+            }
+            else if constexpr (is_specialization_v<decltype(expr1_derivative), ScalarZero>)
+                 {
+                return ScalarZero<decltype(std::pow(m_expr1.eval(), m_expr2.eval()))>{};
+            }
+            else {
+                return ScalarProduct {
+                    ScalarPow<E1, E2> {
+                        m_expr1,
+                        m_expr2
+                    },
+                    ScalarSum {
+                        ScalarProduct {
+                            expr1_derivative,
+                            ScalarDivision {
+                                m_expr2,
+                                m_expr1
+                            }
+                        },
+                        ScalarProduct {
+                            expr2_derivative,
+                            ScalarLog {
+                                m_expr1
+                            }
+                        }
+                    }
+                };
+            }
+        }
+
+        [[nodiscard]]
+        CUDA_HOST constexpr inline auto to_string() const {
+            if constexpr (is_specialization_v<E1, ScalarZero>) {
+                return "";
+            }
+            else if constexpr (is_specialization_v<E2, ScalarZero>) {
+                return "1";
+            }
+            else if constexpr (is_specialization_v<E1, ScalarUnit>) {
+                return "1";
+            }
+            else if constexpr (is_specialization_v<E2, ScalarUnit>) {
+                return m_expr1.to_string();
+            }
+            else {
+                auto expr1_str = m_expr1.to_string();
+                auto expr2_str = m_expr2.to_string();
+                
+                // Add parentheses around expressions that contain operators
+                bool expr1_needs_parens = expr1_str.find('+') != std::string::npos || expr1_str.find('-') != std::string::npos || expr1_str.find('*') != std::string::npos || expr1_str.find('/') != std::string::npos;
+                bool expr2_needs_parens = expr2_str.find('+') != std::string::npos || expr2_str.find('-') != std::string::npos || expr2_str.find('*') != std::string::npos || expr2_str.find('/') != std::string::npos;
+
+                if (expr1_needs_parens && expr2_needs_parens) {
+                    return std::format("({})^({})", expr1_str, expr2_str);
+                }
+                else if (expr1_needs_parens) {
+                    return std::format("({})^{}", expr1_str, expr2_str);
+                }
+                else if (expr2_needs_parens) {
+                    return std::format("{}^({})", expr1_str, expr2_str);
+                }
+                else if (expr2_str.empty()) {
+                    return std::format("1");
+                }
+                else if (expr1_str.empty()) {
+                    return std::format("");
+                }
+                else {
+                    return std::format("{}^{}", expr1_str, expr2_str);
+                }
+            }
+        }
+
+        static constexpr bool variable_data = false;
+
+        [[nodiscard]]
+        CUDA_COMPATIBLE inline constexpr auto eval() const {
+            return std::pow(m_expr1.eval(), m_expr2.eval());
+        }
+
+        private:
+        std::conditional_t< (E1::variable_data), const E1&, const E1> m_expr1;
+        std::conditional_t< (E2::variable_data), const E2&, const E2> m_expr2;
+    };
+
+    template<ScalarExprType E1, ScalarExprType E2>
+    CUDA_COMPATIBLE
+    [[nodiscard]] constexpr auto pow(const E1& base, const E2& exponent) {
+        return ScalarPow<E1, E2>{base, exponent};
+    }
+
+    template<ScalarExprType E, ScalarType S>
+    CUDA_COMPATIBLE
+    [[nodiscard]] constexpr auto pow(const E& base, S exponent) {
+        return ScalarPow<E, ScalarConstant<S>>{base, exponent};
+    }
+
+    template<ScalarType S, ScalarExprType E>
+    CUDA_COMPATIBLE
+    [[nodiscard]] constexpr auto pow(S base, const E& exponent) {
+        return ScalarPow<ScalarConstant<S>, E>{base, exponent};
     }
 
 }

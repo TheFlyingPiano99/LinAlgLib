@@ -77,9 +77,8 @@ int main() {
     print_expr(s1);
     print_expr(s2);
 
-    // Simplified expression to avoid compiler crash
-    auto s = (3 * -s0 + s1 / s0 + s2);
-    print_expr(s);
+    auto s_res = derivate<1>(pow(s1, 2));
+    print_expr(s_res);
 
     return 0;
 }
