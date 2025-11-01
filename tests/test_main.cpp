@@ -1170,3 +1170,312 @@ TEST_CASE("Elementwise Operations with Special Matrices", "[matrix][elementwise]
         REQUIRE(product.eval(1, 2) == Approx(42.0)); // 6 * 7
     }
 }
+
+// Test matrix shape compatibility rules
+TEST_CASE("Matrix Shape Compatibility - Valid Operations", "[matrix][shapes][valid]") {
+    SECTION("Same-shaped matrices") {
+        // 2x2 + 2x2 should work
+        Matrix<double, 2, 2, 0> m1{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 2, 2, 1> m2{{5.0, 6.0}, {7.0, 8.0}};
+        
+        auto sum = m1 + m2;
+        auto diff = m1 - m2;
+        auto product = m1 * m2;
+        auto quotient = m1 / m2;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(6.0));     // 1 + 5
+        REQUIRE(diff.eval(0, 0) == Approx(-4.0));   // 1 - 5
+        REQUIRE(product.eval(0, 0) == Approx(5.0)); // 1 * 5
+        REQUIRE(quotient.eval(0, 0) == Approx(0.2)); // 1 / 5
+    }
+    
+    SECTION("3x3 matrices") {
+        Matrix<double, 3, 3, 0> m1{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}};
+        Matrix<double, 3, 3, 1> m2{{9.0, 8.0, 7.0}, {6.0, 5.0, 4.0}, {3.0, 2.0, 1.0}};
+        
+        auto sum = m1 + m2;
+        auto product = m1 * m2;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(10.0));    // 1 + 9
+        REQUIRE(sum.eval(2, 2) == Approx(10.0));    // 9 + 1
+        REQUIRE(product.eval(1, 1) == Approx(25.0)); // 5 * 5
+    }
+    
+    SECTION("Non-square same-shaped matrices") {
+        // 2x3 + 2x3 should work
+        Matrix<double, 2, 3, 0> m1{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        Matrix<double, 2, 3, 1> m2{{2.0, 3.0, 4.0}, {5.0, 6.0, 7.0}};
+        
+        auto sum = m1 + m2;
+        auto diff = m1 - m2;
+        
+        REQUIRE(sum.eval(0, 2) == Approx(7.0));  // 3 + 4
+        REQUIRE(diff.eval(1, 0) == Approx(-1.0)); // 4 - 5
+        
+        // 3x2 + 3x2 should work
+        Matrix<double, 3, 2, 0> m3{{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+        Matrix<double, 3, 2, 1> m4{{6.0, 5.0}, {4.0, 3.0}, {2.0, 1.0}};
+        
+        auto sum2 = m3 + m4;
+        REQUIRE(sum2.eval(0, 0) == Approx(7.0));  // 1 + 6
+        REQUIRE(sum2.eval(2, 1) == Approx(7.0));  // 6 + 1
+    }
+    
+    SECTION("1x1 matrices (scalar-like)") {
+        Matrix<double, 1, 1, 0> scalar1{{5.0}};
+        Matrix<double, 1, 1, 1> scalar2{{3.0}};
+        
+        auto sum = scalar1 + scalar2;
+        auto product = scalar1 * scalar2;
+        auto quotient = scalar1 / scalar2;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(8.0));
+        REQUIRE(product.eval(0, 0) == Approx(15.0));
+        REQUIRE(quotient.eval(0, 0) == Approx(5.0/3.0));
+    }
+}
+
+TEST_CASE("Matrix-Scalar Compatibility", "[matrix][shapes][scalar]") {
+    SECTION("Matrix + Scalar operations") {
+        Matrix<double, 2, 2, 0> matrix{{1.0, 2.0}, {3.0, 4.0}};
+        Scalar<double, 1> scalar(5.0);
+        
+        // Matrix + Scalar should work (scalar broadcasts)
+        auto sum1 = matrix + scalar;
+        auto sum2 = scalar + matrix;
+        auto diff1 = matrix - scalar;
+        auto diff2 = scalar - matrix;
+        auto prod1 = matrix * scalar;
+        auto prod2 = scalar * matrix;
+        auto quot1 = matrix / scalar;
+        auto quot2 = scalar / matrix;
+        
+        REQUIRE(sum1.eval(0, 0) == Approx(6.0));   // 1 + 5
+        REQUIRE(sum2.eval(1, 1) == Approx(9.0));   // 5 + 4
+        REQUIRE(diff1.eval(0, 1) == Approx(-3.0)); // 2 - 5
+        REQUIRE(diff2.eval(1, 0) == Approx(2.0));  // 5 - 3
+        REQUIRE(prod1.eval(1, 1) == Approx(20.0)); // 4 * 5
+        REQUIRE(prod2.eval(0, 1) == Approx(10.0)); // 5 * 2
+        REQUIRE(quot1.eval(0, 0) == Approx(0.2));  // 1 / 5
+        REQUIRE(quot2.eval(1, 0) == Approx(5.0/3.0)); // 5 / 3
+    }
+    
+    SECTION("Different sized matrices with scalars") {
+        Matrix<double, 3, 2, 0> matrix{{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+        Scalar<double, 1> scalar(2.0);
+        
+        auto scaled = matrix * scalar;
+        auto added = matrix + scalar;
+        
+        REQUIRE(scaled.eval(0, 0) == Approx(2.0));  // 1 * 2
+        REQUIRE(scaled.eval(2, 1) == Approx(12.0)); // 6 * 2
+        REQUIRE(added.eval(1, 0) == Approx(5.0));   // 3 + 2
+        REQUIRE(added.eval(2, 1) == Approx(8.0));   // 6 + 2
+    }
+    
+    SECTION("1x1 Matrix with regular scalars") {
+        Matrix<double, 1, 1, 0> matrix1x1{{7.0}};
+        Scalar<double, 1> scalar(3.0);
+        
+        // 1x1 matrix should work with scalars in both directions
+        auto sum1 = matrix1x1 + scalar;
+        auto sum2 = scalar + matrix1x1;
+        auto product = matrix1x1 * scalar;
+        
+        REQUIRE(sum1.eval(0, 0) == Approx(10.0)); // 7 + 3
+        REQUIRE(sum2.eval(0, 0) == Approx(10.0)); // 3 + 7
+        REQUIRE(product.eval(0, 0) == Approx(21.0)); // 7 * 3
+    }
+}
+
+TEST_CASE("Special Matrix Shape Operations", "[matrix][shapes][special]") {
+    SECTION("IdentityMatrix compatibility") {
+        Matrix<double, 3, 3, 0> matrix{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}};
+        IdentityMatrix<double, 3> identity;
+        
+        // Identity should work with same-sized matrices
+        auto sum = matrix + identity;
+        auto product = matrix * identity;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(2.0));  // 1 + 1 (identity diagonal)
+        REQUIRE(sum.eval(0, 1) == Approx(2.0));  // 2 + 0 (identity off-diagonal)
+        REQUIRE(sum.eval(1, 1) == Approx(6.0));  // 5 + 1 (identity diagonal)
+        
+        REQUIRE(product.eval(0, 0) == Approx(1.0)); // 1 * 1
+        REQUIRE(product.eval(0, 1) == Approx(0.0)); // 2 * 0
+        REQUIRE(product.eval(1, 1) == Approx(5.0)); // 5 * 1
+    }
+    
+    SECTION("ZeroMatrix compatibility") {
+        Matrix<double, 2, 3, 0> matrix{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        ZeroMatrix<double, 2, 3> zero;
+        
+        // Zero should work with same-shaped matrices
+        auto sum = matrix + zero;
+        auto product = matrix * zero;
+        auto diff = matrix - zero;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(1.0));   // 1 + 0
+        REQUIRE(sum.eval(1, 2) == Approx(6.0));   // 6 + 0
+        REQUIRE(product.eval(0, 1) == Approx(0.0)); // 2 * 0
+        REQUIRE(product.eval(1, 0) == Approx(0.0)); // 4 * 0
+        REQUIRE(diff.eval(0, 2) == Approx(3.0));    // 3 - 0
+    }
+    
+    SECTION("Mixed special matrices") {
+        IdentityMatrix<double, 2> identity;
+        ZeroMatrix<double, 2, 2> zero;
+        
+        auto sum = identity + zero;
+        auto diff = identity - zero;
+        auto product = identity * zero;
+        
+        REQUIRE(sum.eval(0, 0) == Approx(1.0));  // 1 + 0
+        REQUIRE(sum.eval(0, 1) == Approx(0.0));  // 0 + 0
+        REQUIRE(diff.eval(1, 1) == Approx(1.0)); // 1 - 0
+        REQUIRE(product.eval(0, 0) == Approx(0.0)); // 1 * 0
+    }
+}
+
+TEST_CASE("Shape Broadcasting Rules", "[matrix][shapes][broadcasting]") {
+    SECTION("Scalar broadcasting to matrices") {
+        Matrix<double, 2, 2, 0> m2x2{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 3, 3, 1> m3x3{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, {7.0, 8.0, 9.0}};
+        Scalar<double, 2> scalar(10.0);
+        
+        // Scalar should work with any matrix size
+        auto sum2x2 = m2x2 + scalar;
+        auto sum3x3 = m3x3 + scalar;
+        auto prod2x2 = scalar * m2x2;
+        auto prod3x3 = scalar * m3x3;
+        
+        REQUIRE(sum2x2.eval(0, 0) == Approx(11.0)); // 1 + 10
+        REQUIRE(sum2x2.eval(1, 1) == Approx(14.0)); // 4 + 10
+        REQUIRE(sum3x3.eval(0, 0) == Approx(11.0)); // 1 + 10
+        REQUIRE(sum3x3.eval(2, 2) == Approx(19.0)); // 9 + 10
+        
+        REQUIRE(prod2x2.eval(0, 1) == Approx(20.0)); // 10 * 2
+        REQUIRE(prod3x3.eval(1, 2) == Approx(60.0)); // 10 * 6
+    }
+    
+    SECTION("1x1 matrix broadcasting") {
+        Matrix<double, 1, 1, 0> scalar_matrix{{5.0}};
+        Matrix<double, 2, 3, 1> regular_matrix{{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}};
+        
+        // 1x1 matrix should broadcast to larger matrices like scalars
+        // This tests that scalar-shaped matrices work correctly with regular matrices
+        auto sum = scalar_matrix + regular_matrix;
+        auto product = regular_matrix * scalar_matrix;
+        
+        // 1x1 matrix should broadcast its single value (5.0) to all positions
+        REQUIRE(sum.eval(0, 0) == Approx(6.0));   // 5 + 1 = 6
+        REQUIRE(sum.eval(0, 1) == Approx(7.0));   // 5 + 2 = 7  
+        REQUIRE(sum.eval(0, 2) == Approx(8.0));   // 5 + 3 = 8
+        REQUIRE(sum.eval(1, 0) == Approx(9.0));   // 5 + 4 = 9
+        REQUIRE(sum.eval(1, 1) == Approx(10.0));  // 5 + 5 = 10
+        REQUIRE(sum.eval(1, 2) == Approx(11.0));  // 5 + 6 = 11
+        
+        // Matrix multiplication should also work with scalar broadcasting
+        REQUIRE(product.eval(0, 0) == Approx(5.0));   // 1 * 5 = 5
+        REQUIRE(product.eval(0, 1) == Approx(10.0));  // 2 * 5 = 10
+        REQUIRE(product.eval(0, 2) == Approx(15.0));  // 3 * 5 = 15
+        REQUIRE(product.eval(1, 0) == Approx(20.0));  // 4 * 5 = 20
+        REQUIRE(product.eval(1, 1) == Approx(25.0));  // 5 * 5 = 25
+        REQUIRE(product.eval(1, 2) == Approx(30.0));  // 6 * 5 = 30
+    }
+}
+
+TEST_CASE("Complex Matrix Shape Operations", "[matrix][shapes][complex]") {
+    SECTION("Chained operations with shape consistency") {
+        Matrix<double, 2, 2, 0> m1{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 2, 2, 1> m2{{5.0, 6.0}, {7.0, 8.0}};
+        Matrix<double, 2, 2, 2> m3{{2.0, 2.0}, {2.0, 2.0}};
+        Scalar<double, 3> scalar(3.0);
+        
+        // Complex expression: (m1 + m2) * m3 + scalar
+        auto complex_expr = (m1 + m2) * m3 + scalar;
+        
+        // Expected: ((1+5)*2+3, (2+6)*2+3) = (15, 19)
+        //           ((3+7)*2+3, (4+8)*2+3) = (23, 27)
+        REQUIRE(complex_expr.eval(0, 0) == Approx(15.0)); // (1+5)*2+3 = 15
+        REQUIRE(complex_expr.eval(0, 1) == Approx(19.0)); // (2+6)*2+3 = 19
+        REQUIRE(complex_expr.eval(1, 0) == Approx(23.0)); // (3+7)*2+3 = 23
+        REQUIRE(complex_expr.eval(1, 1) == Approx(27.0)); // (4+8)*2+3 = 27
+    }
+    
+    SECTION("Mixed scalar and matrix operations") {
+        Matrix<double, 3, 2, 0> matrix{{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}};
+        Scalar<double, 1> s1(2.0);
+        Scalar<double, 2> s2(3.0);
+        
+        // Expression: matrix * s1 + s2
+        auto expr = matrix * s1 + s2;
+        
+        REQUIRE(expr.eval(0, 0) == Approx(5.0));  // 1*2+3 = 5
+        REQUIRE(expr.eval(1, 1) == Approx(11.0)); // 4*2+3 = 11
+        REQUIRE(expr.eval(2, 0) == Approx(13.0)); // 5*2+3 = 13
+    }
+    
+    SECTION("Power operations with shapes") {
+        Matrix<double, 2, 2, 0> base{{2.0, 3.0}, {4.0, 5.0}};
+        Matrix<double, 2, 2, 1> exponent{{2.0, 2.0}, {2.0, 2.0}};
+        Scalar<double, 2> scalar_exp(3.0);
+        
+        // Matrix^Matrix (same shape)
+        auto power1 = pow(base, exponent);
+        // Matrix^Scalar
+        auto power2 = pow(base, scalar_exp);
+        
+        REQUIRE(power1.eval(0, 0) == Approx(4.0));   // 2^2 = 4
+        REQUIRE(power1.eval(0, 1) == Approx(9.0));   // 3^2 = 9
+        REQUIRE(power2.eval(0, 0) == Approx(8.0));   // 2^3 = 8
+        REQUIRE(power2.eval(1, 1) == Approx(125.0)); // 5^3 = 125
+    }
+}
+
+// Note: Incompatible shape operations would cause compile-time errors.
+// These cannot be tested with runtime assertions, but the static_assert
+// statements in the operators should prevent compilation of invalid operations.
+TEST_CASE("Shape Compatibility Documentation", "[matrix][shapes][documentation]") {
+    SECTION("Valid operations summary") {
+        // This test documents what operations are valid:
+        // 1. Matrix op Matrix: Only when dimensions match exactly
+        // 2. Matrix op Scalar: Always valid (scalar broadcasts)
+        // 3. Scalar op Matrix: Always valid (scalar broadcasts)
+        // 4. 1x1 Matrix: Acts like a scalar, works with any other matrix
+        
+        // Examples that work:
+        Matrix<double, 2, 2, 0> m2x2{{1.0, 2.0}, {3.0, 4.0}};
+        Matrix<double, 2, 2, 1> another2x2{{5.0, 6.0}, {7.0, 8.0}};
+        Matrix<double, 1, 1, 2> m1x1{{10.0}};
+        Scalar<double, 3> scalar(5.0);
+        
+        // These should all compile and work:
+        auto valid1 = m2x2 + another2x2;     // Same shape matrices
+        auto valid2 = m2x2 + scalar;         // Matrix + Scalar
+        auto valid3 = scalar + m2x2;         // Scalar + Matrix
+        auto valid4 = m2x2 + m1x1;           // Matrix + 1x1 Matrix
+        auto valid5 = m1x1 * scalar;         // 1x1 Matrix * Scalar
+        
+        // Verify they produce correct results
+        REQUIRE(valid1.eval(0, 0) == Approx(6.0));  // 1 + 5
+        REQUIRE(valid2.eval(0, 0) == Approx(6.0));  // 1 + 5
+        REQUIRE(valid3.eval(0, 0) == Approx(6.0));  // 5 + 1
+        REQUIRE(valid4.eval(0, 0) == Approx(11.0)); // 1 + 10
+        REQUIRE(valid5.eval(0, 0) == Approx(50.0)); // 10 * 5
+    }
+    
+    SECTION("Invalid operations would cause compile errors") {
+        // These operations would NOT compile due to static_assert:
+        // Matrix<double, 2, 2> m2x2;
+        // Matrix<double, 3, 3> m3x3;
+        // auto invalid = m2x2 + m3x3;  // ERROR: Different shapes
+        
+        // Matrix<double, 2, 3> m2x3;
+        // Matrix<double, 3, 2> m3x2;
+        // auto invalid2 = m2x3 * m3x2; // ERROR: Different shapes
+        
+        // The static_assert in operators should prevent these at compile time
+        REQUIRE(true); // This test is for documentation purposes
+    }
+}

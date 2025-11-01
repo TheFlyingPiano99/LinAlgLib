@@ -124,6 +124,15 @@ namespace TinyLA {
     template<ExprType E>
     inline constexpr bool is_scalar_shape_v = is_scalar_shape<E>::value;
 
+    template<ExprType E1, ExprType E2>
+    struct is_elementwise_broadcastable {
+        static constexpr bool value = is_eq_shape_v<E1, E2>
+            || is_scalar_shape_v<E1> || is_scalar_shape_v<E2>;
+    };
+
+    template<ExprType E1, ExprType E2>
+    inline constexpr bool is_elementwise_broadcastable_v = is_elementwise_broadcastable<E1, E2>::value;
+
     template<ScalarType T>
     class ZeroScalar : public AbstractExpr<ZeroScalar<T>> {
         public:
@@ -356,6 +365,12 @@ namespace TinyLA {
 
         [[nodiscard]]
         CUDA_COMPATIBLE inline constexpr auto eval(uint32_t r, uint32_t c) const {
+            if constexpr (Row == 1 && Col == 1) {   // Behave as scalar
+                return m_data[0][0];
+            }
+            if (r >= Row || c >= Col) {
+                throw std::out_of_range("Matrix index out of range.");
+            }
             return m_data[r][c];
         }
 
@@ -418,10 +433,17 @@ namespace TinyLA {
     };
 
     template<class E1, class E2>
-    class AdditionExpr : public AbstractExpr<AdditionExpr<E1, E2>, E1::rows, E2::cols> {
+    class AdditionExpr : public AbstractExpr<AdditionExpr<E1, E2>,
+        std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols> 
+    {
         public:
 
-        CUDA_COMPATIBLE inline constexpr AdditionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr AdditionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {
+            static_assert(is_elementwise_broadcastable_v<E1, E2>,
+                "Incompatible matrix dimensions for element-wise addition."
+            );
+        }
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -501,12 +523,6 @@ namespace TinyLA {
     template<ExprType E1, ExprType E2>
     CUDA_COMPATIBLE
     [[nodiscard]] constexpr auto operator+(const E1& expr1, const E2& expr2) {
-        static_assert(
-            (is_eq_shape_v<E1, E2>
-            || is_scalar_shape_v<E1>
-            || is_scalar_shape_v<E2>),
-            "Incompatible matrix dimensions"
-        );
         return AdditionExpr<E1, E2>{expr1, expr2};
     }
 
@@ -523,7 +539,7 @@ namespace TinyLA {
     }
 
     template<class E>
-    class NegationExpr : public AbstractExpr<NegationExpr<E>> {
+    class NegationExpr : public AbstractExpr<NegationExpr<E>, E::rows, E::cols> {
         public:
 
         CUDA_COMPATIBLE inline constexpr NegationExpr(const E& expr) : m_expr(expr) {}
@@ -579,10 +595,17 @@ namespace TinyLA {
     }
 
     template<class E1, class E2>
-    class SubtractionExpr : public AbstractExpr<SubtractionExpr<E1, E2>> {
+    class SubtractionExpr : public AbstractExpr<SubtractionExpr<E1, E2>,
+        std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols 
+    > {
         public:
 
-        CUDA_COMPATIBLE inline constexpr SubtractionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr SubtractionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {
+            static_assert(is_elementwise_broadcastable_v<E1, E2>,
+                "Incompatible matrix dimensions for element-wise subtraction."
+            );
+        }
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -678,10 +701,17 @@ namespace TinyLA {
     }
 
     template<class E1, class E2>
-    class ElementwiseProductExpr : public AbstractExpr<ElementwiseProductExpr<E1, E2>> {
+    class ElementwiseProductExpr : public AbstractExpr<ElementwiseProductExpr<E1, E2>,
+        std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols
+    > {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ElementwiseProductExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr ElementwiseProductExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {
+            static_assert(is_elementwise_broadcastable_v<E1, E2>,
+                "Incompatible matrix dimensions for element-wise product."
+            );
+        }
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -821,10 +851,17 @@ namespace TinyLA {
     }
 
     template<class E1, class E2>
-    class DivisionExpr : public AbstractExpr<DivisionExpr<E1, E2>> {
+    class DivisionExpr : public AbstractExpr<DivisionExpr<E1, E2>,
+        std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols
+    > {
         public:
 
-        CUDA_COMPATIBLE inline constexpr DivisionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr DivisionExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {
+            static_assert(is_elementwise_broadcastable_v<E1, E2>,
+                "Incompatible matrix dimensions for element-wise division."
+            );
+        }
 
         template<VarIDType varId>
         [[nodiscard]]
@@ -948,7 +985,7 @@ namespace TinyLA {
     }
 
         template<class E>
-    class NaturalLogExpr : public AbstractExpr<NaturalLogExpr<E>> {
+    class NaturalLogExpr : public AbstractExpr<NaturalLogExpr<E>, E::rows, E::cols> {
         public:
 
         CUDA_COMPATIBLE inline constexpr NaturalLogExpr(const E& expr) : m_expr(expr) {}
@@ -1007,10 +1044,17 @@ namespace TinyLA {
     }
 
     template<class E1, class E2>
-    class ElementwisePowExpr : public AbstractExpr<ElementwisePowExpr<E1, E2>> {
+    class ElementwisePowExpr : public AbstractExpr<ElementwisePowExpr<E1, E2>,
+        std::conditional_t<(E1::rows > E2::rows), E1, E2>::rows,
+        std::conditional_t<(E1::cols > E2::cols), E1, E2>::cols>
+    {
         public:
 
-        CUDA_COMPATIBLE inline constexpr ElementwisePowExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {}
+        CUDA_COMPATIBLE inline constexpr ElementwisePowExpr(const E1& expr1, const E2& expr2) : m_expr1(expr1), m_expr2(expr2) {
+            static_assert(is_elementwise_broadcastable_v<E1, E2>,
+                "Incompatible matrix dimensions for element-wise power operation."
+            );
+        }
 
         template<VarIDType varId>
         [[nodiscard]]
