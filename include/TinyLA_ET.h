@@ -131,6 +131,11 @@ namespace TinyLA {
         }
 
         [[nodiscard]]
+        CUDA_COMPATIBLE inline consteval auto gatherVariableDependencies() const {
+            return (static_cast<const AE&>(*this)).gatherVariableDependencies();
+        }
+
+        [[nodiscard]]
         CUDA_HOST constexpr inline auto to_string() const {
             return static_cast<const AE&>(*this).to_string();
         }
@@ -621,7 +626,28 @@ namespace TinyLA {
                 return m_expr1.to_string();
             }
             else {
-                return std::format("{} * {}", m_expr1.to_string(), m_expr2.to_string());
+                auto expr1_str = m_expr1.to_string();
+                auto expr2_str = m_expr2.to_string();
+                
+                // Add parentheses around expressions that contain operators
+                bool expr1_needs_parens = expr1_str.find('+') != std::string::npos || expr1_str.find('-') != std::string::npos;
+                bool expr2_needs_parens = expr2_str.find('+') != std::string::npos || expr2_str.find('-') != std::string::npos;
+                
+                if (expr1_needs_parens && expr2_needs_parens) {
+                    return std::format("({}) * ({})", expr1_str, expr2_str);
+                }
+                else if (expr1_needs_parens) {
+                    return std::format("({}) * {}", expr1_str, expr2_str);
+                }
+                else if (expr2_needs_parens) {
+                    return std::format("{} * ({})", expr1_str, expr2_str);
+                }
+                else if (expr1_str.empty() || expr2_str.empty()) {
+                    return std::format("{}{}", expr1_str, expr2_str);
+                }
+                else {
+                    return std::format("{} * {}", expr1_str, expr2_str);
+                }
             }
         }
 
