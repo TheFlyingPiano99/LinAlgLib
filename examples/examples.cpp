@@ -1,8 +1,15 @@
-#include "TinyLA.h"
+//#include "TinyLA.h"
+#include "TinyLA_ET.h"
 #include <iostream>
+#include <print>
+#include <complex>
 
+void print_expr(const auto& expr) {
+    std::println("{} = {}", expr.to_string(), expr.eval());
+}
 
 int main() {
+    /*
     // Create 3D vectors
     // Create a fixed size vector:
     auto v1 = TinyLA::Vec<double, 3>{1.0, 2.0, 3.0};
@@ -60,6 +67,19 @@ int main() {
     std::cout << "Number of roots: " << solution.root_count << std::endl;
     std::cout << "Root 1: " << TinyLA::to_string(std::get<0>(solution.roots)) << std::endl;
     std::cout << "Root 2: " << TinyLA::to_string(std::get<1>(solution.roots)) << std::endl;
+    */
+
+    TinyLA::Scalar<double, 0> x0 = 0.0;
+    TinyLA::Scalar<double, 1> x1 = 6.0;
+    TinyLA::Scalar<double, 2> s2 = 7.0;
     
+    print_expr(x0);
+    print_expr(x1);
+    print_expr(s2);
+
+    auto s = (x0 * 2.0 * x1 + x1).derivate<0>();
+        
+    print_expr(s);
+
     return 0;
 }
